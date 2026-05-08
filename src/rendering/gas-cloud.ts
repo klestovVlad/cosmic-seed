@@ -10,6 +10,7 @@ const VERT_SHADER = /* glsl */ `
   attribute float aTemp;
   uniform float uPointSize;
   uniform float uPixelRatio;
+  uniform float uMaxScreenSize;
   uniform float uTempMin;
   uniform float uTempMax;
   varying float vTempNorm;
@@ -17,7 +18,8 @@ const VERT_SHADER = /* glsl */ `
   void main() {
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
     gl_Position = projectionMatrix * mvPosition;
-    gl_PointSize = uPointSize * uPixelRatio * (1.0 / -mvPosition.z);
+    float perspective = uPointSize * uPixelRatio * (1.0 / -mvPosition.z);
+    gl_PointSize = min(perspective, uMaxScreenSize * uPixelRatio);
 
     float lo = log(max(uTempMin, 1e-9));
     float hi = log(max(uTempMax, uTempMin * 1.000001));
@@ -41,8 +43,9 @@ const FRAG_SHADER = /* glsl */ `
   void main() {
     vec2 d = gl_PointCoord - vec2(0.5);
     float r2 = dot(d, d);
-    if (r2 > 0.25) discard;
-    float alpha = uOpacity * smoothstep(0.25, 0.05, r2);
+    if (r2 > 0.22) discard;
+    // Sharper edge so gas reads as discrete particles, not soft bokeh.
+    float alpha = uOpacity * smoothstep(0.22, 0.16, r2);
     gl_FragColor = vec4(ramp(vTempNorm), alpha);
   }
 `;
@@ -77,6 +80,7 @@ export function createGasCloud(gasCount: number, dpr: number): GasCloud {
     fragmentShader: FRAG_SHADER,
     uniforms: {
       uPointSize: { value: 20.0 },
+      uMaxScreenSize: { value: 13.0 },
       uPixelRatio: { value: Math.min(dpr, 2) },
       uTempMin: { value: 1e-3 },
       uTempMax: { value: 1.0 },

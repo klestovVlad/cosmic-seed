@@ -100,8 +100,11 @@ export function createScene(canvas: HTMLCanvasElement): SceneHandle {
   bloomComposer.addPass(new RenderPass(scene, camera));
   const bloom = new UnrealBloomPass(
     new THREE.Vector2(1, 1),
-    /* strength */ 1.1,
-    /* radius   */ 0.55,
+    // Strength tuned down: with stars now meant to be 1–3 distinct
+    // events (not a fireworks display), each one should read as a
+    // contained luminous source, not a plate-sized smear.
+    /* strength */ 0.7,
+    /* radius   */ 0.45,
     // Threshold can be 0 because the bloom pass renders only layer 1
     // (stars). DM and gas are simply not rendered there — they don't need
     // to be darkened or thresholded out.

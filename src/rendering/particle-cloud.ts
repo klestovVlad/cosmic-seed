@@ -4,6 +4,7 @@ const VERT_SHADER = /* glsl */ `
   attribute float aDensity;
   uniform float uPointSize;
   uniform float uPixelRatio;
+  uniform float uMaxScreenSize;
   uniform float uDensityMin;
   uniform float uDensityMax;
   varying float vDensityNorm;
@@ -11,9 +12,11 @@ const VERT_SHADER = /* glsl */ `
   void main() {
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
     gl_Position = projectionMatrix * mvPosition;
-    // Distance attenuation matched to perspective; multiply by DPR so the
-    // physical size on screen is consistent across displays.
-    gl_PointSize = uPointSize * uPixelRatio * (1.0 / -mvPosition.z);
+    // Perspective scaling × DPR, but clamped at a hard upper bound. Without
+    // the clamp, particles near the camera blow up to 100s of pixels and
+    // read as out-of-focus bokeh blobs instead of discrete particles.
+    float perspective = uPointSize * uPixelRatio * (1.0 / -mvPosition.z);
+    gl_PointSize = min(perspective, uMaxScreenSize * uPixelRatio);
 
     // Log scaling makes the central peak readable without crushing the wings.
     float lo = log(max(uDensityMin, 1e-6));
@@ -38,10 +41,12 @@ const FRAG_SHADER = /* glsl */ `
   void main() {
     vec2 d = gl_PointCoord - vec2(0.5);
     float r2 = dot(d, d);
-    if (r2 > 0.25) discard;
-    float alpha = uOpacity * smoothstep(0.25, 0.05, r2);
+    if (r2 > 0.22) discard;
+    // Sharper edge than the previous smoothstep(0.25, 0.05) bokeh: most
+    // of the sprite is opaque, with a tight 1-pixel-or-so anti-alias
+    // ring at the boundary. Reads as discrete particles, not blurry orbs.
+    float alpha = uOpacity * smoothstep(0.22, 0.16, r2);
     vec3 color = ramp(vDensityNorm);
-    // Boost luminance for the densest sprites — small additive halo.
     color += vec3(0.15) * pow(vDensityNorm, 4.0);
     gl_FragColor = vec4(color, alpha);
   }
@@ -80,6 +85,9 @@ export function createParticleCloud(count: number, dpr: number): ParticleCloud {
       // (~2.6 from origin), DM particles read as discrete dots rather
       // than overlapping bokeh blobs.
       uPointSize: { value: 22.0 },
+      // Hard cap on screen-space sprite size so particles closer to the
+      // camera don't dominate the frame as fuzzy bokeh.
+      uMaxScreenSize: { value: 14.0 },
       uPixelRatio: { value: Math.min(dpr, 2) },
       uColorLo: { value: new THREE.Color('#2a1b3d') },
       uColorMid: { value: new THREE.Color('#5b3f8e') },

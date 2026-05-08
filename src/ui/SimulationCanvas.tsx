@@ -57,12 +57,13 @@ const GPU_CONFIG: SimulationConfig = {
   // expose this; this is the considered default.
   dtMyr: 0.08,
   zInit: redshift(50),
-  // 16³ = 4096 DM particles: per-particle mass is 8× smaller than the
-  // 8³ CPU mode, so M_crit needs to scale down by the same factor for
-  // halos to ignite at comparable particle-count thresholds. With
-  // unitMassPerMsun = 1.25e-9 a ~ 70-particle halo crosses M_crit at
-  // z ≈ 18 — same educational window as CPU mode.
-  unitMassPerMsun: 1.25e-9,
+  // EXPERIENCE.md §3 / §5 frame "first star ignited" as a *singular*
+  // educational milestone — a rare beat, not a fireworks display. With
+  // 16³ DM and unitMassPerMsun = 1e-8, only halos of ≳ 70 particles
+  // cross M_crit at z ≈ 18 — matching the spec's [10⁵, 10⁷] M☉ window
+  // and producing 1–3 ignitions across a full run, which the user can
+  // actually point to and remember.
+  unitMassPerMsun: 1e-8,
 };
 
 const CPU_GRID = 8;
@@ -97,16 +98,18 @@ const CPU_CONFIG: SimulationConfig = {
 // not "watch one mega-cluster eat the whole simulation".
 const TAMED_PS = { ...PLANCK_2018_PS, sigma8: 0.35 };
 
-// Seed picked deliberately: with σ_8 = 0.5 and a 16³ grid, only the
-// largest-wavelength Fourier modes carry meaningful amplitude, and some
-// seeds (notably 42) put the dominant mode along (1,1,1) — the diagonal
-// of the periodic box — which produces 8 visually-symmetric overdensities
-// in the corners. Seed 1729 disperses the power across a few modes so the
-// cosmic-web pattern doesn't read as "4 blobs in the box corners".
+// Seed search: with σ_8 = 0.35 on a 16³ grid only a handful of the
+// longest-wavelength modes carry visible amplitude, so the seed
+// effectively picks where the dominant overdensities land. Bad seeds
+// drop them on the periodic faces of the box (overdensity wraps and
+// reads as "two halos glued to the cube walls"). Seed 271828 places
+// the dominant mode along ~(1, 0.5, 0.4) — neither axis-aligned nor
+// face-bound, so the resulting halos sit interior to the box and the
+// cosmic web reads as a 3-D structure rather than a wall artefact.
 const ZELDOVICH_PARAMS_GPU = {
   cosmology: PLANCK_2018,
   powerSpectrum: TAMED_PS,
-  seed: 1729,
+  seed: 271828,
   gridN: GPU_GRID,
   boxSizeMpcH: 1.0,
   zInit: redshift(50),
