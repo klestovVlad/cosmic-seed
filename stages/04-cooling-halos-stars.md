@@ -206,4 +206,33 @@ Make the gas able to cool, find halos, and ignite the first stars. Add primordia
 - [ ] J_LW = 100 ignition-delay regression (Δz ≥ 5) — needs a longer
       integration test; deferred to 4d.
 - [ ] No-DM regression (Ω_DM = 0 → no halos by z = 10) — also 4d.
-- [ ] Saslaw-Zipoy H₂ tracker with formation/dissociation channels — 4c2.
+- [x] Saslaw-Zipoy H₂ tracker with formation/dissociation channels — 4c2.
+
+### 4c2 — per-particle H₂ network (2026-05-08)
+
+- `src/physics/h2-network.ts`: rate-limited H⁻ formation channel with
+  the Galli & Palla 1998 fit `k_form(T) = 1.43 × 10⁻¹⁸ T^0.93` (cm³ s⁻¹),
+  Abel+ 1997 LW dissociation rate `k_diss = 1.4 × 10⁻¹² · J_21` (s⁻¹),
+  Tegmark+ 1997 freeze-out electron fraction `x_e = 2 × 10⁻⁴`, and a
+  one-step implicit Euler `x_new = (x + R_f · dt) / (1 + R_d · dt)` —
+  unconditionally stable for any dt, which matters because the macro
+  cosmological step is millions of formation timescales long. Output
+  clamped to `[floor 10⁻⁶, ceiling 0.1]` so the cooling integrator never
+  sees a non-physical value, even after a NaN J_LW or negative T.
+- Skipped for v1 (each lands later if a stage needs it): the H + H⁺ →
+  H₂⁺ pathway (only matters T ≳ 10⁴ K), collisional dissociation
+  (T ≳ 5000 K), self-shielding of the LW background in dense gas, and a
+  proper x_e(T) ionisation tracker.
+- Simulation runner: x_H₂ now evolves per particle each step. The
+  cooling pass uses the freshly stepped x_H₂, so cool-dense halo cores
+  build up the coolant over their dynamical time and accelerate cooling,
+  while the diffuse IGM stays near the floor. Snapshot adds
+  `gasMaxH2Fraction` and `gasMeanH2Fraction`; HUD's gas card now shows
+  `x_H₂ peak`.
+- Default IC drops to `gasH2BaselineFraction = 1e-6` (the network's
+  floor) — the runner now grows H₂ where conditions favour it rather
+  than starting everywhere at 10⁻³.
+- 9 new unit tests (monotonic formation in T and n_H, decay under strong
+  LW, floor enforcement, implicit-step stability for dt = 10²⁵ s, NaN
+  guard, equilibrium matches long-evolution limit, ceiling reached at
+  J_LW = 0). 137 unit + 2 e2e green.

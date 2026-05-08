@@ -143,6 +143,11 @@ export function Hud(): React.JSX.Element {
               }
               hint="Coldest gas particle (Stage 4c — H₂ cooling)."
             />
+            <Stat
+              label="x_H₂ peak"
+              value={d.gasMassFraction > 0 ? fmt(d.gasMaxH2Fraction, 2) : '—'}
+              hint="Densest cool gas builds molecular hydrogen — the v1 coolant (Stage 4c2)."
+            />
           </div>
         </section>
 

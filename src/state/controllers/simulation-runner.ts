@@ -4,7 +4,6 @@
 
 import {
   aOfT,
-  approximateH2Fraction,
   asNumber,
   centralDensity,
   codeUToKelvin,
@@ -17,10 +16,13 @@ import {
   createLeapfrogState,
   createSpatialGrid,
   cubicSplineKernel,
+  DEFAULT_H2_NETWORK,
   type DensityKernel,
   energyReport,
+  evolveH2Fraction,
   findHalos,
   type GasCoolingUnits,
+  type H2NetworkParams,
   type Halo,
   type IgnitionParams,
   igniteEligibleHalos,
@@ -113,11 +115,18 @@ export interface SimulationConfig {
   /** Seconds per code-time-unit. */
   readonly gasUnitTimePerSec: number;
   /**
-   * Baseline H₂ number-fraction relative to total H. The full Saslaw–
-   * Zipoy network arrives in 4c2; for v1 we hold x_H₂ at this value
-   * suppressed by the LW background via `approximateH2Fraction`.
+   * Initial H₂ number-fraction relative to total H. Each gas particle
+   * starts at this value; the Galli-Palla / Abel H₂ network in
+   * `evolveH2Fraction` then builds it up in cool-dense regions and
+   * relaxes it back under a Lyman-Werner background.
    */
   readonly gasH2BaselineFraction: number;
+  /**
+   * Stage 4c2: per-particle H₂ network parameters. Defaults to the
+   * Galli-Palla / Abel literature values; tests can override to verify
+   * monotonicity / equilibrium / floor behaviour.
+   */
+  readonly h2Network: H2NetworkParams;
 }
 
 export const DEFAULT_CONFIG: SimulationConfig = {
@@ -159,7 +168,8 @@ export const DEFAULT_CONFIG: SimulationConfig = {
   gasUnitTempK: 3.0e5,
   gasUnitNumberDensityCgs: 0.6,
   gasUnitTimePerSec: 5.27e15,
-  gasH2BaselineFraction: 1e-3,
+  gasH2BaselineFraction: 1e-6,
+  h2Network: DEFAULT_H2_NETWORK,
 };
 
 export interface SimulationSnapshot {
@@ -188,6 +198,11 @@ export interface SimulationSnapshot {
   /** Stage 4c: coldest gas particle internal energy + matching T (K). */
   readonly gasMinInternalEnergy: number;
   readonly gasMinTemperatureK: number;
+  /** Stage 4c2: peak per-particle H₂ fraction. Tracks how far the
+   *  formation network has run in the densest cool gas. */
+  readonly gasMaxH2Fraction: number;
+  /** Mean H₂ fraction across all gas particles. */
+  readonly gasMeanH2Fraction: number;
   /** Subcycle stats from the most recent cooling pass — useful when tuning. */
   readonly coolingMaxSubsteps: number;
   readonly coolingCappedThisStep: boolean;
@@ -265,20 +280,19 @@ export function createSimulationRunner(
   const sphDudt = new Float32Array(gasCount);
   if (gasCount > 0) gasInternalEnergy.fill(config.gasInitialEnergy);
 
-  // Stage 4c: H₂ cooling state. The fraction is held at the LW-suppressed
-  // baseline for v1 (a tracker network arrives in 4c2). Cooling-units adapter
-  // stays a single struct so the tests don't need to know which knobs we
-  // tuned for the cosmological default.
+  // Stage 4c2: per-particle H₂ tracker (Galli-Palla H⁻ formation +
+  // Abel-1997 LW dissociation, implicit-Euler one-step). Each step the
+  // network sees the particle's current T (from u) and n_H (from SPH ρ)
+  // and steps x_H₂ — so cool-dense halo cores genuinely build up the
+  // coolant over their dynamical time, rather than the Stage-4c flat
+  // baseline that produced cooling everywhere in equal measure.
   const gasH2Fraction = new Float32Array(gasCount);
   const coolingUnits: GasCoolingUnits = {
     kelvinPerCodeU: config.gasUnitTempK,
     nHCgsPerCodeRho: config.gasUnitNumberDensityCgs,
     secondsPerCodeTime: config.gasUnitTimePerSec,
   };
-  if (gasCount > 0) {
-    const xH2 = approximateH2Fraction(config.ignitionJ_LW, config.gasH2BaselineFraction);
-    gasH2Fraction.fill(xH2);
-  }
+  if (gasCount > 0) gasH2Fraction.fill(config.gasH2BaselineFraction);
   let coolingMaxSubstepsThisStep = 0;
   let coolingCappedThisStep = false;
 
@@ -491,14 +505,30 @@ export function createSimulationRunner(
       // than the macro step in dense-core gas, but is order-of-magnitude
       // longer in the diffuse IGM, so a global timestep choice would be
       // wrong either way.
+      //
+      // Stage 4c2 inserts an H₂ network step before cooling: x_H₂ now
+      // grows in the cool-dense gas where the formation rate dominates
+      // and relaxes back under a Lyman-Werner background.
       if (gasCount > 0 && config.coolingEnabled) {
         coolingMaxSubstepsThisStep = 0;
         coolingCappedThisStep = false;
+        const dtSeconds = config.dt * coolingUnits.secondsPerCodeTime;
         for (let g = 0; g < gasCount; g += 1) {
           const u = gasInternalEnergy[g] ?? 0;
           const rho = gasDensities[g] ?? 0;
-          const xH2 = gasH2Fraction[g] ?? 0;
-          if (u <= 0 || rho <= 0 || xH2 <= 0) continue;
+          if (u <= 0 || rho <= 0) continue;
+          const T = codeUToKelvin(u, coolingUnits);
+          const nH = rho * coolingUnits.nHCgsPerCodeRho;
+          const xH2 = evolveH2Fraction({
+            xH2: gasH2Fraction[g] ?? config.gasH2BaselineFraction,
+            temperatureK: T,
+            nHCgs: nH,
+            jLW: config.ignitionJ_LW,
+            dtSeconds,
+            params: config.h2Network,
+          });
+          gasH2Fraction[g] = xH2;
+          if (xH2 <= 0) continue;
           const result = subcycleCooling({
             uCode: u,
             rhoCode: rho,
@@ -556,6 +586,8 @@ export function createSimulationRunner(
     gasMaxInternalEnergy: number;
     gasMinInternalEnergy: number;
     gasMinTemperatureK: number;
+    gasMaxH2Fraction: number;
+    gasMeanH2Fraction: number;
   } {
     if (gasCount === 0) {
       return {
@@ -564,6 +596,8 @@ export function createSimulationRunner(
         gasMaxInternalEnergy: 0,
         gasMinInternalEnergy: 0,
         gasMinTemperatureK: 0,
+        gasMaxH2Fraction: 0,
+        gasMeanH2Fraction: 0,
       };
     }
     let totalMass = 0;
@@ -576,11 +610,16 @@ export function createSimulationRunner(
     let sumU = 0;
     let maxU = 0;
     let minU = Number.POSITIVE_INFINITY;
+    let sumX = 0;
+    let maxX = 0;
     for (let g = 0; g < gasCount; g += 1) {
       const u = gasInternalEnergy[g] ?? 0;
       sumU += u;
       if (u > maxU) maxU = u;
       if (u < minU) minU = u;
+      const x = gasH2Fraction[g] ?? 0;
+      sumX += x;
+      if (x > maxX) maxX = x;
     }
     if (!Number.isFinite(minU)) minU = 0;
     return {
@@ -589,6 +628,8 @@ export function createSimulationRunner(
       gasMaxInternalEnergy: maxU,
       gasMinInternalEnergy: minU,
       gasMinTemperatureK: codeUToKelvin(minU, coolingUnits),
+      gasMaxH2Fraction: maxX,
+      gasMeanH2Fraction: sumX / gasCount,
     };
   }
 }

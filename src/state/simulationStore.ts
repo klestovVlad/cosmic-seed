@@ -28,6 +28,9 @@ export interface SimulationDiagnostics {
   /** Stage 4c: coldest gas particle's u (code) and T (K). */
   readonly gasMinInternalEnergy: number;
   readonly gasMinTemperatureK: number;
+  /** Stage 4c2: peak / mean H₂ number-fraction across gas particles. */
+  readonly gasMaxH2Fraction: number;
+  readonly gasMeanH2Fraction: number;
   readonly coolingMaxSubsteps: number;
   readonly coolingCappedThisStep: boolean;
   /** Stage 4: halo + star diagnostics. */
@@ -93,6 +96,8 @@ const emptyDiagnostics: SimulationDiagnostics = {
   gasMaxInternalEnergy: 0,
   gasMinInternalEnergy: 0,
   gasMinTemperatureK: 0,
+  gasMaxH2Fraction: 0,
+  gasMeanH2Fraction: 0,
   coolingMaxSubsteps: 0,
   coolingCappedThisStep: false,
   haloCount: 0,

@@ -73,6 +73,13 @@ export {
   subcycleCooling,
 } from './cooling';
 export {
+  DEFAULT_H2_NETWORK,
+  evolveH2Fraction,
+  h2EquilibriumFraction,
+  type H2EvolutionInputs,
+  type H2NetworkParams,
+} from './h2-network';
+export {
   criticalHaloMass,
   evaluateIgnition,
   igniteEligibleHalos,
