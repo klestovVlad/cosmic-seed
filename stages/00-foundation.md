@@ -1,6 +1,6 @@
 # Stage 0: Foundation
 
-**Status:** DONE (Vercel link pending — manual user step)
+**Status:** DONE
 **Estimated:** 1 day
 **Depends on:** —
 **Spec reference:** project tooling (not in cosmology brief)

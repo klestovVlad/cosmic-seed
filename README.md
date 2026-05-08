@@ -6,7 +6,7 @@ Interactive browser simulation of dark-matter halo formation, baryon infall, and
 
 Stage 0 (foundation) complete. Next up: [Stage 1 — gravity prototype](stages/01-gravity-prototype.md). See [`stages/STATUS.md`](stages/STATUS.md) for the at-a-glance plan.
 
-Live URL: _pending_ — needs `pnpm dlx vercel link` from the repo root, then push.
+Live URL: **https://cosmic-seed.vercel.app** _(currently behind Vercel Authentication — disable Deployment Protection in the Vercel dashboard to make it public)_.
 
 ## Getting started
 

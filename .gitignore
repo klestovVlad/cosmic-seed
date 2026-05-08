@@ -46,3 +46,4 @@ test-results/
 
 # Claude Code local
 .claude/local/
+.vercel
