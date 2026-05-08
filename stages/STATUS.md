@@ -4,22 +4,22 @@ Last updated: 2026-05-08
 
 ## At a glance
 
-| #   | Stage                                                                | Status      | Notes                                                 |
-| --- | -------------------------------------------------------------------- | ----------- | ----------------------------------------------------- |
-| 00  | [Foundation](00-foundation.md)                                       | DONE        | scaffold, tooling, CI, Vercel deploy live             |
-| 01  | [Gravity prototype](01-gravity-prototype.md)                         | IN PROGRESS | 1a/1b/1c landed. Cross-val test pending.              |
-| 02  | [Cosmology + initial conditions](02-cosmology-initial-conditions.md) | DONE        | Zeldovich IC, periodic comoving leapfrog, δ_max chart |
-| 03  | [Baryons & SPH](03-baryons-sph.md)                                   | TODO        | gas, pressure, viscosity                              |
-| 04  | [Cooling, halos, first stars](04-cooling-halos-stars.md)             | TODO        | H₂ cooling, FoF, M_crit ignition                      |
-| 05  | [Parameters & UI](05-parameters-ui.md)                               | TODO        | sliders, presets, URL share                           |
-| 06  | [WDM, SIDM, streaming velocity](06-wdm-sidm-streaming.md)            | TODO        | dark-matter alternatives                              |
-| 07  | [Polish & deploy](07-polish-deploy.md)                               | TODO        | bloom, mobile, copy, prod deploy                      |
+| #   | Stage                                                                | Status      | Notes                                                                  |
+| --- | -------------------------------------------------------------------- | ----------- | ---------------------------------------------------------------------- |
+| 00  | [Foundation](00-foundation.md)                                       | DONE        | scaffold, tooling, CI, Vercel deploy live                              |
+| 01  | [Gravity prototype](01-gravity-prototype.md)                         | IN PROGRESS | 1a/1b/1c landed. Cross-val test pending.                               |
+| 02  | [Cosmology + initial conditions](02-cosmology-initial-conditions.md) | DONE        | Zeldovich IC, periodic comoving leapfrog, δ_max chart                  |
+| 03  | [Baryons & SPH](03-baryons-sph.md)                                   | DONE\*      | 3a/3b: CPU SPH + T-coloured gas. 3c/3d: GPU SPH + shock test deferred. |
+| 04  | [Cooling, halos, first stars](04-cooling-halos-stars.md)             | TODO        | H₂ cooling, FoF, M_crit ignition                                       |
+| 05  | [Parameters & UI](05-parameters-ui.md)                               | TODO        | sliders, presets, URL share                                            |
+| 06  | [WDM, SIDM, streaming velocity](06-wdm-sidm-streaming.md)            | TODO        | dark-matter alternatives                                               |
+| 07  | [Polish & deploy](07-polish-deploy.md)                               | TODO        | bloom, mobile, copy, prod deploy                                       |
 
 ## Active stage
 
-**Stage 3 — Baryons & SPH.** Next up: gas as a second species, SPH density / pressure / artificial viscosity, gas particles colour-coded by temperature. Big visual jump — gas dissipates and stabilises halos, no more pulsation, JWST-style appearance starts here.
+**Stage 4 — Cooling, halos, first stars.** Next: H₂ cooling, friends-of-friends halo finder, M_crit ignition criterion (Kulkarni+2021), star particles rendered as bright white points with bloom. Star ignition is the big educational beat — "this is when the first stars in the universe lit up".
 
-Stage 1 stays open in parallel: cross-validation test (Playwright with WebGPU-enabled chromium), sampled potential-energy readout in GPU mode. Default GPU count tuned to 5 k after user testing.
+Stage 1 stays open in parallel (cross-validation test, sampled potential-energy readout in GPU mode). Stage 3 closed with two deferred items: 3c (WGSL SPH compute kernels for the GPU path — currently GPU mode is DM-only, gas only visible on CPU fallback) and 3d (Sod shock-tube test + isothermal-collapse self-similar test). Both are physics-quality items, not blocking the Stage-4 visual story.
 
 ## Open blockers
 
@@ -27,6 +27,7 @@ _None._ One UX nit from Stage 0: Vercel project still has Deployment Protection 
 
 ## Recent activity
 
+- 2026-05-08 — Stage 3 closed (3c/3d deferred): two-species hydrodynamics on the CPU path. SPH cubic-spline kernel + density estimator + symmetrised pressure-gradient force + adiabatic energy update; gas particles render in a separate THREE.Points cloud with a blue→cyan→orange→white temperature ramp; HUD gains a gas section (mass fraction, mean/max u, compression-heating amplification). 86 unit tests + 2 e2e green. GPU mode stays DM-only until the WGSL SPH kernels (3c) ship.
 - 2026-05-08 — Stage 2c3 / Stage 2 closed: δ_max(a) chart with Carroll-Press-Turner reference line, linear-growth regression test, density-sample ring buffer in the store. 68 unit tests + 2 e2e green.
 - 2026-05-08 — Stage 2c2: cosmological dynamics live. Periodic min-image gravity (CPU + WGSL), `cosmologicalLeapfrogStep` with `1/a²` drift scale, Zeldovich IC as default, runner refactored to accept external particles. Visual: spherical-collapse single blob → multiple discrete halos forming on Zeldovich seeds.
 - 2026-05-08 — Stage 2c1: cosmic time bookkeeping. SimulationDiagnostics carries ageInMyr, scaleFactor, redshift; runner advances cosmological clock by dtMyr; TimeStrip reads from store instead of wall-clock.

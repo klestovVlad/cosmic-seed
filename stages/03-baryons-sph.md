@@ -1,6 +1,6 @@
 # Stage 3: Baryons & SPH
 
-**Status:** IN PROGRESS (3a done; 3b in flight)
+**Status:** DONE (3a + 3b shipped; 3c WGSL SPH + 3d shock-tube test deferred to a follow-up perf pass — physics works on the CPU path, GPU stays DM-only until we move SPH to WGSL)
 **Estimated:** 1 week
 **Depends on:** Stage 2
 **Spec reference:** Phase 2 (cosmology brief §5, §1.5)

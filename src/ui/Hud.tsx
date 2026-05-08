@@ -48,7 +48,7 @@ export function Hud(): React.JSX.Element {
       <div className="grow" />
 
       {/* Bottom: stats panel */}
-      <div className="pointer-events-auto grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="pointer-events-auto grid grid-cols-1 gap-3 sm:grid-cols-4">
         <section className="rounded-md border border-white/10 bg-black/40 p-3 backdrop-blur-sm">
           <h2 className="mb-2 font-mono text-[10px] tracking-[0.3em] text-(--color-ink-3) uppercase">
             simulation
@@ -92,6 +92,38 @@ export function Hud(): React.JSX.Element {
               label="ρ / ρ₀"
               value={fmt(d.maxCentralDensity / Math.max(1e-9, d.centralDensity || 1), 2)}
               hint="Growth of central density relative to current."
+            />
+          </div>
+        </section>
+
+        <section className="rounded-md border border-white/10 bg-black/40 p-3 backdrop-blur-sm">
+          <h2 className="mb-2 font-mono text-[10px] tracking-[0.3em] text-(--color-ink-3) uppercase">
+            gas
+          </h2>
+          <div className="space-y-1">
+            <Stat
+              label="mass frac"
+              value={d.gasMassFraction > 0 ? fmtPercent(d.gasMassFraction, 1) : '—'}
+              hint="Fraction of total mass that's baryons (Ω_b/Ω_m ≈ 0.157)"
+            />
+            <Stat
+              label="mean u"
+              value={d.gasMassFraction > 0 ? fmt(d.gasMeanInternalEnergy, 4) : '—'}
+              hint="Average gas internal energy (proxy for temperature)"
+            />
+            <Stat
+              label="max u"
+              value={d.gasMassFraction > 0 ? fmt(d.gasMaxInternalEnergy, 4) : '—'}
+              hint="Hottest gas particle. Heated via adiabatic compression."
+            />
+            <Stat
+              label="u_max / u_0"
+              value={
+                d.gasMassFraction > 0
+                  ? fmt(d.gasMaxInternalEnergy / Math.max(1e-9, d.gasMeanInternalEnergy), 1)
+                  : '—'
+              }
+              hint="Compression-heating amplification factor."
             />
           </div>
         </section>
