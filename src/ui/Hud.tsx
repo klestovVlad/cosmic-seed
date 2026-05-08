@@ -1,4 +1,6 @@
 import { useSimulationStore } from '@state/simulationStore';
+import { getLabel, type LabelKey } from './i18n/labels';
+import { useUiStore } from '@state/uiStore';
 import { formatSolarMass as fmtMass, massAnchor } from './mass-anchor';
 import { Stat } from './Stat';
 
@@ -14,8 +16,26 @@ function fmtPercent(n: number, digits = 3): string {
   return `${(n * 100).toFixed(digits)}%`;
 }
 
+interface LabeledStatProps {
+  readonly labelKey: LabelKey;
+  readonly value: string;
+  readonly hint?: string;
+  readonly mode: 'expert' | 'explained';
+}
+
+function LabeledStat({ labelKey, value, hint, mode }: LabeledStatProps): React.JSX.Element {
+  const props: { label: string; value: string; hint?: string } = {
+    label: getLabel(labelKey, mode),
+    value,
+  };
+  if (hint !== undefined) props.hint = hint;
+  return <Stat {...props} />;
+}
+
 export function Hud(): React.JSX.Element {
   const { particleCount, isRunning, stepsPerFrame, diagnostics: d } = useSimulationStore();
+  const expertMode = useUiStore((s) => s.expertMode);
+  const mode: 'expert' | 'explained' = expertMode ? 'expert' : 'explained';
 
   const drift =
     d.initialTotalEnergy === 0
@@ -51,8 +71,9 @@ export function Hud(): React.JSX.Element {
       {/* First-ignition banner — appears the moment the first halo crosses M_crit. */}
       {d.firstIgnition !== null && (
         <div className="pointer-events-auto mx-auto mb-3 max-w-md rounded-md border border-amber-300/30 bg-amber-300/10 px-4 py-2 text-center font-mono text-[11px] text-amber-100 backdrop-blur-sm">
-          <span className="text-amber-300">first star ignited</span> · z ={' '}
-          {d.firstIgnition.redshift.toFixed(1)} · M_halo = {fmtMass(d.firstIgnition.haloMassMsun)}
+          <span className="text-amber-300">first star ignited</span> · {getLabel('redshift', mode)}{' '}
+          = {d.firstIgnition.redshift.toFixed(1)} · {expertMode ? 'M_halo' : 'halo mass'} ={' '}
+          {fmtMass(d.firstIgnition.haloMassMsun)}
         </div>
       )}
 
@@ -63,12 +84,12 @@ export function Hud(): React.JSX.Element {
             simulation
           </h2>
           <div className="space-y-1">
-            <Stat label="particles" value={particleCount.toString()} />
-            <Stat label="step" value={d.step.toString()} />
-            <Stat label="time" value={fmt(d.time)} />
-            <Stat label="fps" value={fmt(d.fps, 1)} />
-            <Stat label="steps/s" value={fmt(d.stepsPerSecond, 0)} />
-            <Stat label="steps/frame" value={stepsPerFrame.toString()} />
+            <LabeledStat labelKey="particles" mode={mode} value={particleCount.toString()} />
+            <LabeledStat labelKey="step" mode={mode} value={d.step.toString()} />
+            <LabeledStat labelKey="simTime" mode={mode} value={fmt(d.time)} />
+            <LabeledStat labelKey="fps" mode={mode} value={fmt(d.fps, 1)} />
+            <LabeledStat labelKey="stepsPerSecond" mode={mode} value={fmt(d.stepsPerSecond, 0)} />
+            <LabeledStat labelKey="stepsPerFrame" mode={mode} value={stepsPerFrame.toString()} />
           </div>
         </section>
 
@@ -77,16 +98,22 @@ export function Hud(): React.JSX.Element {
             energy
           </h2>
           <div className="space-y-1">
-            <Stat label="kinetic T" value={fmt(d.kineticEnergy, 4)} />
-            <Stat label="potential U" value={fmt(d.potentialEnergy, 4)} />
-            <Stat label="total E" value={fmt(d.totalEnergy, 4)} />
-            <Stat
-              label="drift"
+            <LabeledStat labelKey="kineticEnergy" mode={mode} value={fmt(d.kineticEnergy, 4)} />
+            <LabeledStat labelKey="potentialEnergy" mode={mode} value={fmt(d.potentialEnergy, 4)} />
+            <LabeledStat labelKey="totalEnergy" mode={mode} value={fmt(d.totalEnergy, 4)} />
+            <LabeledStat
+              labelKey="energyDrift"
+              mode={mode}
               value={fmtPercent(drift)}
               hint="(E − E₀) / |E₀|; integrator should keep this small."
             />
-            <Stat label="−T/U" value={fmt(d.virialRatio, 3)} hint="0.5 in virial equilibrium" />
-            <Stat label="‖p‖" value={fmt(d.momentumMagnitude, 4)} />
+            <LabeledStat
+              labelKey="virialRatio"
+              mode={mode}
+              value={fmt(d.virialRatio, 3)}
+              hint="0.5 in virial equilibrium"
+            />
+            <LabeledStat labelKey="momentum" mode={mode} value={fmt(d.momentumMagnitude, 4)} />
           </div>
         </section>
 
@@ -95,10 +122,11 @@ export function Hud(): React.JSX.Element {
             density
           </h2>
           <div className="space-y-1">
-            <Stat label="ρ central" value={fmt(d.centralDensity, 3)} />
-            <Stat label="ρ max" value={fmt(d.maxCentralDensity, 3)} />
-            <Stat
-              label="ρ / ρ₀"
+            <LabeledStat labelKey="centralDensity" mode={mode} value={fmt(d.centralDensity, 3)} />
+            <LabeledStat labelKey="peakDensity" mode={mode} value={fmt(d.maxCentralDensity, 3)} />
+            <LabeledStat
+              labelKey="densityGrowth"
+              mode={mode}
               value={fmt(d.maxCentralDensity / Math.max(1e-9, d.centralDensity || 1), 2)}
               hint="Growth of central density relative to current."
             />
@@ -110,23 +138,27 @@ export function Hud(): React.JSX.Element {
             gas
           </h2>
           <div className="space-y-1">
-            <Stat
-              label="mass frac"
+            <LabeledStat
+              labelKey="gasMassFraction"
+              mode={mode}
               value={d.gasMassFraction > 0 ? fmtPercent(d.gasMassFraction, 1) : '—'}
               hint="Fraction of total mass that's baryons (Ω_b/Ω_m ≈ 0.157)"
             />
-            <Stat
-              label="mean u"
+            <LabeledStat
+              labelKey="meanGasEnergy"
+              mode={mode}
               value={d.gasMassFraction > 0 ? fmt(d.gasMeanInternalEnergy, 4) : '—'}
               hint="Average gas internal energy (proxy for temperature)"
             />
-            <Stat
-              label="max u"
+            <LabeledStat
+              labelKey="peakGasEnergy"
+              mode={mode}
               value={d.gasMassFraction > 0 ? fmt(d.gasMaxInternalEnergy, 4) : '—'}
               hint="Hottest gas particle. Heated via adiabatic compression."
             />
-            <Stat
-              label="u_max / u_0"
+            <LabeledStat
+              labelKey="compressionHeating"
+              mode={mode}
               value={
                 d.gasMassFraction > 0
                   ? fmt(d.gasMaxInternalEnergy / Math.max(1e-9, d.gasMeanInternalEnergy), 1)
@@ -134,19 +166,21 @@ export function Hud(): React.JSX.Element {
               }
               hint="Compression-heating amplification factor."
             />
-            <Stat
-              label="T_min"
+            <LabeledStat
+              labelKey="minGasTemperature"
+              mode={mode}
               value={
                 d.gasMassFraction > 0 && d.gasMinTemperatureK > 0
                   ? `${d.gasMinTemperatureK.toFixed(0)} K`
                   : '—'
               }
-              hint="Coldest gas particle (Stage 4c — H₂ cooling)."
+              hint="Coldest gas particle. H₂ cooling drives this down."
             />
-            <Stat
-              label="x_H₂ peak"
+            <LabeledStat
+              labelKey="peakH2Fraction"
+              mode={mode}
               value={d.gasMassFraction > 0 ? fmt(d.gasMaxH2Fraction, 2) : '—'}
-              hint="Densest cool gas builds molecular hydrogen — the v1 coolant (Stage 4c2)."
+              hint="Densest cool gas builds molecular hydrogen — the v1 coolant."
             />
           </div>
         </section>
@@ -156,28 +190,33 @@ export function Hud(): React.JSX.Element {
             halos & stars
           </h2>
           <div className="space-y-1">
-            <Stat
-              label="halos"
+            <LabeledStat
+              labelKey="haloCount"
+              mode={mode}
               value={d.haloCount.toString()}
               hint="FoF clusters above minMembers"
             />
-            <Stat
-              label="largest M"
+            <LabeledStat
+              labelKey="largestHaloMass"
+              mode={mode}
               value={d.largestHaloMass > 0 ? fmt(d.largestHaloMass, 4) : '—'}
               hint="Most massive halo (code units)"
             />
-            <Stat
-              label="stars"
+            <LabeledStat
+              labelKey="starCount"
+              mode={mode}
               value={d.starCount.toString()}
               hint="Halos that have crossed M_crit and ignited Pop III"
             />
-            <Stat
-              label="first z"
+            <LabeledStat
+              labelKey="firstIgnitionRedshift"
+              mode={mode}
               value={d.firstIgnition !== null ? d.firstIgnition.redshift.toFixed(1) : '—'}
               hint="Redshift of the first ignition event"
             />
-            <Stat
-              label="first M"
+            <LabeledStat
+              labelKey="firstIgnitionMass"
+              mode={mode}
               value={d.firstIgnition !== null ? fmtMass(d.firstIgnition.haloMassMsun) : '—'}
               hint={
                 d.firstIgnition !== null

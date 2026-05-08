@@ -15,6 +15,29 @@ Format:
 
 ---
 
+## 2026-05-08 — Stage 5 splits into 5a / 5b / 5c / 5d / 5e / 5f
+
+**Status:** accepted
+**Context:** Stage 5 in the brief is enormous — 13 deliverables + 7 clarity deliverables: a parameter schema, Zustand store, URL serialiser, slider panel, presets, timeline + checkpointing, three diagnostic charts, help system, regen dialog, Expert/Explained toggle with full label-pair registry. That's a 1-week stage in calendar terms but ~5 sessions of code in our cadence. Trying to ship in one push compresses the visible UI work and risks shallow tests.
+**Decision:**
+
+- **5a** (this push): Expert/Explained label-pair registry + the toolbar toggle, URL + localStorage persistence, HUD refactor to read from the registry. This lands the foundation EXPERIENCE.md §10 calls out as required for v1 ("defaults to Explained, persists in URL") _before_ the parameter UI is built — every label that lands afterward goes into the registry from day one rather than being retro-fitted.
+- **5b**: parameter schema (`src/state/parameters/schema.ts`) + `parametersStore` + versioned URL serialisation + slider panel mounted to the live simulation runner with a "regen needed" dialog for IC-affecting changes.
+- **5c**: presets (Standard / No DM / WDM / Strong LW) + share-URL button. Builds on 5b.
+- **5d**: timeline (play/pause/step + speed slider + scrub bar) + checkpointing ring buffer. Speed-of-time readout already exists in TimeStrip from 2a; this stage wires the speed slider to it.
+- **5e**: diagnostic side-panel — δ_max chart already exists (Stage 2c3); add halo-mass-function with Press-Schechter overlay, gas phase diagram with cooling-ineffective shading, and per-chart "what to look for" captions.
+- **5f**: parameter tooltips + milestone toast system (subscribes to the snapshot signals Stage 4 already exposes — haloCount transitions through 0, firstIgnition appearing, gasMinTemperatureK crossing 10⁴ K).
+
+**Alternatives considered:**
+
+- _Land 5 in one push._ Rejected — same risk pattern as Stage 2/3/4. The parameter UI alone is ~3 days of careful work; bundling it with charts + timeline + toasts produces shallow versions of each.
+- _Defer Expert/Explained until last._ Rejected — every HUD/parameter label that lands during 5b/5c/5d would need a retro-fit pass to add the Explained register. Building the label registry first makes the toggle a free win on every subsequent stage.
+- _Use a heavyweight i18n library (i18next, FormatJS)._ Rejected — we don't need plurals, ICU, runtime locale switching, or string interpolation. The label registry is a static map keyed on a TypeScript union; type safety + zero runtime cost beats the dependency.
+
+**Consequences:** Six pushes for Stage 5 instead of one. The first (5a) is mostly invisible plumbing that flips a few cryptic HUD labels — a small but real visible win for non-physicist visitors. 5b is the big visible push (sliders editing the live sim). The Expert/Explained toggle becomes a structural commitment from 5a forward: every new label must register a pair (`labels.test.ts` enforces it).
+
+---
+
 ## 2026-05-08 — Stage 4 splits into 4a / 4b / 4c / 4d
 
 **Status:** accepted

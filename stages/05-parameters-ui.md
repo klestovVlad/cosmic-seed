@@ -1,6 +1,6 @@
 # Stage 5: Parameters & UI
 
-**Status:** TODO
+**Status:** IN PROGRESS (5a — Expert/Explained labels + toggle — shipped)
 **Estimated:** 1 week
 **Depends on:** Stage 4
 **Spec reference:** Phase 4 (cosmology brief §2, §3)
@@ -79,4 +79,47 @@ Promote the simulation from "runs with hard-coded parameters" to "interactive te
 
 ## Notes / learnings
 
-_(filled during work)_
+### 5a — Expert/Explained labels + toggle (2026-05-08)
+
+- `src/ui/i18n/labels.ts`: literal-typed `LABELS` const map keyed on a
+  `LabelKey` union. Each entry is `{ expert, explained, tooltip? }`.
+  `getLabel(key, mode)` is a pure lookup so callers can centralise on
+  this instead of inlining ad-hoc strings (the existing TimeStrip /
+  ScaleBar / DeltaMaxChart use `useUiStore((s) => !s.expertMode)` and
+  switch inline; the new `useLabel(key)` hook is a typed alternative
+  for new components and the HUD refactor).
+- `src/ui/i18n/expert-mode-url.ts`: pure URL/localStorage adapter.
+  Precedence: URL `?x=0|1` (shared-link semantics) → localStorage
+  `cs.expertMode` (last-visit memory) → default Explained. The
+  parameter is omitted from the URL for the default register so
+  shared links stay minimal.
+- `src/ui/ExpertToggle.tsx`: top-left two-cell pill. Two effects sync
+  the store back to URL (history.replaceState — no extra back-stack
+  entries) and localStorage on every change. URL parsed on mount.
+- HUD refactor: 28 hard-coded `<Stat label="...">` strings replaced
+  with `<LabeledStat labelKey="..." mode={mode} />`. The toggle now
+  flips: `−T/U` ↔ `virial ratio`, `ρ central` ↔ `central density`,
+  `‖p‖` ↔ `total momentum`, `x_H₂ peak` ↔ `peak H₂ fraction`, etc.
+  Mass-anchor strings (≈ dwarf-galaxy seed) stay always-on by design;
+  they're the bit that makes a bare `10⁶ M☉` mean something.
+- Tests: `tests/ui/labels.test.ts` (every key has both registers,
+  cryptic Expert symbols differ from Explained, getLabel resolves
+  correctly), `tests/ui/expert-mode-url.test.ts` (URL parse / write,
+  default-register omission, storage round-trip, precedence in
+  resolveInitialExpertMode). 16 new unit tests; 153 total + 3 e2e
+  green.
+- DECISIONS.md: Stage 5 split into 5a / 5b / 5c / 5d / 5e / 5f.
+  Building the label registry first means every label that lands in
+  5b–5f registers a pair on the way past instead of being retro-fitted.
+
+### Acceptance status (after 5a)
+
+- [x] Expert/Explained toggle in the toolbar (top-left pill).
+- [x] URL persistence (`?x=1` for Expert, omitted for Explained).
+- [x] localStorage persistence (`cs.expertMode`).
+- [x] Label-pair registry; coverage asserted by `tests/ui/labels.test.ts`.
+- [x] HUD reads from registry — 28 labels flip across the page.
+- [ ] Plain-language tooltips on every parameter — needs the parameter
+      panel from 5b.
+- [ ] Mass / length anchors in HUD — Stage-4b mass anchors already
+      ship; length anchors arrive in 5e with the chart captions.
