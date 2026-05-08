@@ -25,7 +25,8 @@ export function createScene(canvas: HTMLCanvasElement): SceneHandle {
   const scene = new THREE.Scene();
 
   const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 1000);
-  camera.position.set(0, 0, 4);
+  // Slight 3D-tilt so the box doesn't look like a flat square.
+  camera.position.set(1.6, 1.0, 2.4);
   camera.lookAt(0, 0, 0);
 
   const controls = new OrbitControls(camera, canvas);
@@ -36,6 +37,11 @@ export function createScene(canvas: HTMLCanvasElement): SceneHandle {
   controls.rotateSpeed = 0.6;
   controls.zoomSpeed = 0.8;
   controls.enablePan = false;
+  // Gentle auto-orbit so the scene feels alive even when the user isn't
+  // dragging. Disabled the moment user interacts; OrbitControls re-enables
+  // it after `autoRotateDelay` ms of idle (which we keep at the default).
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 0.45; // ≈ 1 rev / 90 s
 
   const resize = (width: number, height: number, dpr: number): void => {
     renderer.setPixelRatio(Math.min(dpr, 2));

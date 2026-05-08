@@ -76,7 +76,7 @@ export function createParticleCloud(count: number, dpr: number): ParticleCloud {
     vertexShader: VERT_SHADER,
     fragmentShader: FRAG_SHADER,
     uniforms: {
-      uPointSize: { value: 220.0 },
+      uPointSize: { value: 110.0 },
       uPixelRatio: { value: Math.min(dpr, 2) },
       uColorLo: { value: new THREE.Color('#2a1b3d') },
       uColorMid: { value: new THREE.Color('#5b3f8e') },

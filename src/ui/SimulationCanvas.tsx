@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { createScene } from '@rendering/scene';
+import { createBoxFrame } from '@rendering/box-frame';
 import { createParticleCloud, type ParticleCloud } from '@rendering/particle-cloud';
 import { createLoop } from '@rendering/loop';
 import { initWebGpu } from '@rendering/gpu/device';
@@ -24,23 +25,25 @@ const HUD_REFRESH_HZ = 10;
 const HUD_REFRESH_INTERVAL_MS = 1000 / HUD_REFRESH_HZ;
 
 // Stage 2c2 — cosmological mode by default: Zeldovich IC, periodic
-// min-image gravity, comoving leapfrog with 1/a² drift scale. Particle
-// count is the cube of the Zeldovich grid resolution; we pick 16 → 4096
-// for GPU and 8 → 512 for CPU.
-const GPU_GRID = 16;
+// min-image gravity, comoving leapfrog with 1/a² drift scale.
+// User-experience tuning (post 2c3 polish):
+//   * grid 20³ on GPU = 8 000 particles (richer field, still well below the
+//     compositor-starvation threshold from Stage 1c).
+//   * lower σ_8 so the field stays in a visually-rewarding linear → mildly
+//     nonlinear regime instead of collapsing to a single dominant halo.
+//   * tighter density kernel + smaller point sprites so individual halos
+//     are crisp instead of merging into puffs.
+//   * slower dtMyr so the eye can follow the structure-formation arc.
+const GPU_GRID = 20;
 const GPU_CONFIG: SimulationConfig = {
   ...DEFAULT_CONFIG,
   count: GPU_GRID ** 3,
   cosmologicalMode: true,
-  // Box size 1 in code units; particles centred on cells of L/N. Mean
-  // inter-particle separation = L/N = 1/16 = 0.0625.
   boxHalfExtent: 0.5,
-  softening: 0.025,
-  densityKernelRadius: 0.1,
-  // Slow the integrator down a bit so the cosmic-web evolution is visible
-  // before particles fly across the box.
-  dt: 1.5e-3,
-  dtMyr: 0.4,
+  softening: 0.018,
+  densityKernelRadius: 0.06,
+  dt: 1.2e-3,
+  dtMyr: 0.2,
   zInit: redshift(50),
 };
 
@@ -51,15 +54,17 @@ const CPU_CONFIG: SimulationConfig = {
   cosmologicalMode: true,
   boxHalfExtent: 0.5,
   softening: 0.05,
-  densityKernelRadius: 0.18,
-  dt: 1.5e-3,
-  dtMyr: 0.4,
+  densityKernelRadius: 0.16,
+  dt: 1.2e-3,
+  dtMyr: 0.2,
   zInit: redshift(50),
 };
 
+const TAMED_PS = { ...PLANCK_2018_PS, sigma8: 0.5 };
+
 const ZELDOVICH_PARAMS_GPU = {
   cosmology: PLANCK_2018,
-  powerSpectrum: PLANCK_2018_PS,
+  powerSpectrum: TAMED_PS,
   seed: 42,
   gridN: GPU_GRID,
   boxSizeMpcH: 1.0,
@@ -122,6 +127,8 @@ export function SimulationCanvas(): React.JSX.Element {
       const scene = createScene(canvas);
       const cloud: ParticleCloud = createParticleCloud(runner.count, window.devicePixelRatio);
       scene.scene.add(cloud.object);
+      const boxFrame = config.cosmologicalMode ? createBoxFrame(config.boxHalfExtent) : null;
+      if (boxFrame !== null) scene.scene.add(boxFrame.object);
 
       const store = useSimulationStore.getState();
       store.setParticleCount(runner.count);
@@ -197,6 +204,7 @@ export function SimulationCanvas(): React.JSX.Element {
         useSimulationStore.getState().setRunning(false);
         window.removeEventListener('resize', handleResize);
         cloud.dispose();
+        boxFrame?.dispose();
         scene.dispose();
         runner.destroy();
         gpuCtx?.destroy();
