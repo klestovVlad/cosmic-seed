@@ -25,6 +25,11 @@ export interface SimulationDiagnostics {
   readonly gasMassFraction: number;
   readonly gasMeanInternalEnergy: number;
   readonly gasMaxInternalEnergy: number;
+  /** Stage 4c: coldest gas particle's u (code) and T (K). */
+  readonly gasMinInternalEnergy: number;
+  readonly gasMinTemperatureK: number;
+  readonly coolingMaxSubsteps: number;
+  readonly coolingCappedThisStep: boolean;
   /** Stage 4: halo + star diagnostics. */
   readonly haloCount: number;
   readonly largestHaloMass: number;
@@ -86,6 +91,10 @@ const emptyDiagnostics: SimulationDiagnostics = {
   gasMassFraction: 0,
   gasMeanInternalEnergy: 0,
   gasMaxInternalEnergy: 0,
+  gasMinInternalEnergy: 0,
+  gasMinTemperatureK: 0,
+  coolingMaxSubsteps: 0,
+  coolingCappedThisStep: false,
   haloCount: 0,
   largestHaloMass: 0,
   largestHaloCentre: null,

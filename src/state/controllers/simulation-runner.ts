@@ -4,8 +4,10 @@
 
 import {
   aOfT,
+  approximateH2Fraction,
   asNumber,
   centralDensity,
+  codeUToKelvin,
   computeAccelerations,
   computeDensities,
   computeSphDensityForRange,
@@ -18,6 +20,7 @@ import {
   type DensityKernel,
   energyReport,
   findHalos,
+  type GasCoolingUnits,
   type Halo,
   type IgnitionParams,
   igniteEligibleHalos,
@@ -36,6 +39,7 @@ import {
   type SphKernel,
   sphericalPerturbation,
   type Star,
+  subcycleCooling,
   tOfA,
   zOfA,
 } from '@physics/index';
@@ -97,6 +101,23 @@ export interface SimulationConfig {
   readonly ignitionJ_LW: number;
   /** Streaming velocity v_bc in km/s. Default 0. */
   readonly ignitionVbc: number;
+  /**
+   * Stage 4c: enable primordial H₂ cooling in the gas-energy step. When
+   * `false`, gas evolves adiabatically (Stage 3b behaviour).
+   */
+  readonly coolingEnabled: boolean;
+  /** Code-u → Kelvin conversion (calibrated to the cosmological IC). */
+  readonly gasUnitTempK: number;
+  /** Code-density → cm⁻³ conversion at the IC redshift. */
+  readonly gasUnitNumberDensityCgs: number;
+  /** Seconds per code-time-unit. */
+  readonly gasUnitTimePerSec: number;
+  /**
+   * Baseline H₂ number-fraction relative to total H. The full Saslaw–
+   * Zipoy network arrives in 4c2; for v1 we hold x_H₂ at this value
+   * suppressed by the LW background via `approximateH2Fraction`.
+   */
+  readonly gasH2BaselineFraction: number;
 }
 
 export const DEFAULT_CONFIG: SimulationConfig = {
@@ -129,6 +150,16 @@ export const DEFAULT_CONFIG: SimulationConfig = {
   unitMassPerMsun: 1e-8,
   ignitionJ_LW: 0,
   ignitionVbc: 0,
+  coolingEnabled: true,
+  // Calibrated for the cosmological-mode default (boxHalfExtent = 0.5,
+  // dt = 1.2e-3, dtMyr = 0.2). Stage 4c2 will compute these from the
+  // cosmology + box-size config rather than treating them as opaque
+  // free parameters; for now they're a documented adapter to physical
+  // units, not a discovery.
+  gasUnitTempK: 3.0e5,
+  gasUnitNumberDensityCgs: 0.6,
+  gasUnitTimePerSec: 5.27e15,
+  gasH2BaselineFraction: 1e-3,
 };
 
 export interface SimulationSnapshot {
@@ -154,6 +185,12 @@ export interface SimulationSnapshot {
   readonly gasMassFraction: number;
   readonly gasMeanInternalEnergy: number;
   readonly gasMaxInternalEnergy: number;
+  /** Stage 4c: coldest gas particle internal energy + matching T (K). */
+  readonly gasMinInternalEnergy: number;
+  readonly gasMinTemperatureK: number;
+  /** Subcycle stats from the most recent cooling pass — useful when tuning. */
+  readonly coolingMaxSubsteps: number;
+  readonly coolingCappedThisStep: boolean;
   /** Stage 4: number of halos found at the most recent halo-finder pass. */
   readonly haloCount: number;
   /** Largest halo mass in code units, or 0 if no halos. */
@@ -227,6 +264,23 @@ export function createSimulationRunner(
   const sphPressureAccels = new Float32Array(gasCount * 4);
   const sphDudt = new Float32Array(gasCount);
   if (gasCount > 0) gasInternalEnergy.fill(config.gasInitialEnergy);
+
+  // Stage 4c: H₂ cooling state. The fraction is held at the LW-suppressed
+  // baseline for v1 (a tracker network arrives in 4c2). Cooling-units adapter
+  // stays a single struct so the tests don't need to know which knobs we
+  // tuned for the cosmological default.
+  const gasH2Fraction = new Float32Array(gasCount);
+  const coolingUnits: GasCoolingUnits = {
+    kelvinPerCodeU: config.gasUnitTempK,
+    nHCgsPerCodeRho: config.gasUnitNumberDensityCgs,
+    secondsPerCodeTime: config.gasUnitTimePerSec,
+  };
+  if (gasCount > 0) {
+    const xH2 = approximateH2Fraction(config.ignitionJ_LW, config.gasH2BaselineFraction);
+    gasH2Fraction.fill(xH2);
+  }
+  let coolingMaxSubstepsThisStep = 0;
+  let coolingCappedThisStep = false;
 
   // Combined force evaluator: gravity for all + SPH pressure for gas.
   const evaluateForces = (s: ParticleSystem): void => {
@@ -430,6 +484,35 @@ export function createSimulationRunner(
           gasInternalEnergy[g] = next > 1e-9 ? next : 1e-9;
         }
       }
+
+      // Stage 4c: H₂ cooling. Runs after the adiabatic update so any
+      // compression-heating amplification is the input to the radiative
+      // sink. Subcycled per-particle — cooling time can be much shorter
+      // than the macro step in dense-core gas, but is order-of-magnitude
+      // longer in the diffuse IGM, so a global timestep choice would be
+      // wrong either way.
+      if (gasCount > 0 && config.coolingEnabled) {
+        coolingMaxSubstepsThisStep = 0;
+        coolingCappedThisStep = false;
+        for (let g = 0; g < gasCount; g += 1) {
+          const u = gasInternalEnergy[g] ?? 0;
+          const rho = gasDensities[g] ?? 0;
+          const xH2 = gasH2Fraction[g] ?? 0;
+          if (u <= 0 || rho <= 0 || xH2 <= 0) continue;
+          const result = subcycleCooling({
+            uCode: u,
+            rhoCode: rho,
+            xH2,
+            dtCode: config.dt,
+            units: coolingUnits,
+          });
+          gasInternalEnergy[g] = Math.max(result.uCode, 1e-9);
+          if (result.substeps > coolingMaxSubstepsThisStep) {
+            coolingMaxSubstepsThisStep = result.substeps;
+          }
+          if (result.capped) coolingCappedThisStep = true;
+        }
+      }
     },
     snapshot(): SimulationSnapshot {
       const { kinetic, potential, total, virialRatio } = energyReport(system, gravityOpts);
@@ -453,6 +536,8 @@ export function createSimulationRunner(
         momentumMagnitude: momentumReport(system).magnitude,
         maxParticleDensity,
         ...gasStats(),
+        coolingMaxSubsteps: coolingMaxSubstepsThisStep,
+        coolingCappedThisStep,
         haloCount: latestHalos.length,
         largestHaloMass: latestHalos[0]?.mass ?? 0,
         largestHaloCentre:
@@ -469,9 +554,17 @@ export function createSimulationRunner(
     gasMassFraction: number;
     gasMeanInternalEnergy: number;
     gasMaxInternalEnergy: number;
+    gasMinInternalEnergy: number;
+    gasMinTemperatureK: number;
   } {
     if (gasCount === 0) {
-      return { gasMassFraction: 0, gasMeanInternalEnergy: 0, gasMaxInternalEnergy: 0 };
+      return {
+        gasMassFraction: 0,
+        gasMeanInternalEnergy: 0,
+        gasMaxInternalEnergy: 0,
+        gasMinInternalEnergy: 0,
+        gasMinTemperatureK: 0,
+      };
     }
     let totalMass = 0;
     let gasMass = 0;
@@ -482,15 +575,20 @@ export function createSimulationRunner(
     }
     let sumU = 0;
     let maxU = 0;
+    let minU = Number.POSITIVE_INFINITY;
     for (let g = 0; g < gasCount; g += 1) {
       const u = gasInternalEnergy[g] ?? 0;
       sumU += u;
       if (u > maxU) maxU = u;
+      if (u < minU) minU = u;
     }
+    if (!Number.isFinite(minU)) minU = 0;
     return {
       gasMassFraction: totalMass > 0 ? gasMass / totalMass : 0,
       gasMeanInternalEnergy: sumU / gasCount,
       gasMaxInternalEnergy: maxU,
+      gasMinInternalEnergy: minU,
+      gasMinTemperatureK: codeUToKelvin(minU, coolingUnits),
     };
   }
 }

@@ -159,3 +159,51 @@ Make the gas able to cool, find halos, and ignite the first stars. Add primordia
 - [ ] Cooling, H₂ network, J_LW dependence, FoF cooling test, halo-mass
       fn, no-DM regression — still TODO; come in 4c (cooling) and 4d
       (acceptance suite + visual checkpoint).
+
+### 4c — H₂ cooling channel (2026-05-08)
+
+- `src/physics/cooling.ts`: low-density H₂ cooling rate Λ_LD(T) using
+  the Galli & Palla 1998 polynomial fit (eq. 26) — clamped at 100 K and
+  1.2×10⁴ K so the integrator can't read off the fit window. Returned in
+  proper CGS (erg cm³ s⁻¹) so the function is testable against literature
+  values without unit gymnastics. `applyCoolingStep` is a forward-Euler
+  step that converts code-u → K, evaluates Λ, applies dT/dt = −(γ−1) Λ
+  n_H x_H₂ / k_B, and returns code-u with a CMB floor at 2.7 K so
+  finite-precision drift can't push gas into negative pressure.
+  `subcycleCooling` caps substeps at 8 with a 0.1 t_cool CFL — runaway
+  cooling in dense halo cores otherwise destabilises the macro step.
+- Code↔physical unit adapter: `GasCoolingUnits` carries kelvinPerCodeU,
+  nHCgsPerCodeRho, secondsPerCodeTime. Defaults are calibrated for the
+  cosmological-mode IC: u₀ = 5×10⁻⁴ → T ≈ 150 K, mean SPH density →
+  cosmic-baryon n_H at z = 50, dt = 1.2×10⁻³ → 0.2 Myr. 4c2 will derive
+  these from box-size + cosmology config rather than treating them as
+  free.
+- Stand-in H₂ fraction: `approximateH2Fraction(J_LW, baseline)` uses the
+  Kulkarni+2021 LW-suppression shape `1 + 4·J_LW^0.47` to scale the
+  baseline (default 10⁻³). Holds steady per-particle for v1; the full
+  Saslaw-Zipoy network is deferred to 4c2.
+- Simulation runner: gas internal-energy update grew a cooling pass after
+  the adiabatic step. New config knobs (`coolingEnabled`, gas unit
+  conversions, `gasH2BaselineFraction`) are wired to typed defaults.
+  Snapshot adds `gasMinInternalEnergy`, `gasMinTemperatureK`,
+  `coolingMaxSubsteps`, `coolingCappedThisStep` so the HUD can show
+  whether anything actually got cold (and the developer can see when the
+  subcycler hit the cap).
+- HUD: gas card now shows `T_min` in Kelvin alongside u_max / u_0.
+- 22 new unit tests (Λ monotonicity, fit window, x_H₂ ↘ as J_LW ↗, code↔K
+  round-trip, Euler step monotonic descent, x_H₂=0 no-op, ρ=0 no-op, CMB
+  floor on aggressive overstep, subcycle ≈ Euler in slow regime). 128
+  total + 2 e2e green.
+
+#### Acceptance status (after 4c)
+
+- [x] Λ_H₂ at sample T = {100, 1000, 5000} K reproduces published Galli-
+      Palla values within the literature-fit tolerance.
+- [x] Cooling integration in the SPH energy step with subcycling cap.
+- [x] LW background suppresses x_H₂ via the same `1 + 4 J_LW^0.47` factor
+      that governs M_crit — keeps the "more LW → harder to form stars"
+      story coherent across modules.
+- [ ] J_LW = 100 ignition-delay regression (Δz ≥ 5) — needs a longer
+      integration test; deferred to 4d.
+- [ ] No-DM regression (Ω_DM = 0 → no halos by z = 10) — also 4d.
+- [ ] Saslaw-Zipoy H₂ tracker with formation/dissociation channels — 4c2.

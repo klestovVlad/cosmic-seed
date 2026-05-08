@@ -60,6 +60,19 @@ export { computeSphDensity, computeSphDensityForRange } from './sph-density';
 export { computeSphForcesAndEnergy, type SphForceOptions, type SphForceOutputs } from './sph-force';
 export { findHalos, type FoFOptions, type Halo } from './halo-finder';
 export {
+  applyCoolingStep,
+  approximateH2Fraction,
+  codeUToKelvin,
+  coolingTimeScale,
+  DEFAULT_GAS_COOLING_UNITS,
+  type CoolingStepInputs,
+  type GasCoolingUnits,
+  h2CoolingRateLowDensity,
+  K_B_CGS,
+  kelvinToCodeU,
+  subcycleCooling,
+} from './cooling';
+export {
   criticalHaloMass,
   evaluateIgnition,
   igniteEligibleHalos,

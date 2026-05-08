@@ -134,6 +134,15 @@ export function Hud(): React.JSX.Element {
               }
               hint="Compression-heating amplification factor."
             />
+            <Stat
+              label="T_min"
+              value={
+                d.gasMassFraction > 0 && d.gasMinTemperatureK > 0
+                  ? `${d.gasMinTemperatureK.toFixed(0)} K`
+                  : '—'
+              }
+              hint="Coldest gas particle (Stage 4c — H₂ cooling)."
+            />
           </div>
         </section>
 
