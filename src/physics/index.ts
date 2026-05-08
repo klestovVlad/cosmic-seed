@@ -54,6 +54,7 @@ export {
   topHatWindow,
 } from './power-spectrum';
 export { fft1d, fft3d } from './fft';
+export { type ZeldovichOutput, type ZeldovichParams, zeldovichField } from './zeldovich-ic';
 export { createRandom, type Random } from './random';
 export {
   centerOfMass,
