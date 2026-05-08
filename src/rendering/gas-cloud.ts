@@ -76,13 +76,13 @@ export function createGasCloud(gasCount: number, dpr: number): GasCloud {
     vertexShader: VERT_SHADER,
     fragmentShader: FRAG_SHADER,
     uniforms: {
-      uPointSize: { value: 55.0 },
+      uPointSize: { value: 20.0 },
       uPixelRatio: { value: Math.min(dpr, 2) },
       uTempMin: { value: 1e-3 },
       uTempMax: { value: 1.0 },
       // See particle-cloud.ts — selective bloom plus reduced per-sprite
       // additive intensity recover the cosmic-web contrast.
-      uOpacity: { value: 0.55 },
+      uOpacity: { value: 0.35 },
     },
     transparent: true,
     depthWrite: false,

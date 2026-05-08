@@ -71,26 +71,27 @@ export function createScene(canvas: HTMLCanvasElement): SceneHandle {
   const scene = new THREE.Scene();
 
   const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 1000);
-  // Camera is INSIDE the periodic box: edges of the wireframe go off-screen,
-  // viewport shows the interior of the simulated volume.
-  camera.position.set(0.7, 0.45, 1.05);
+  // Camera positioned OUTSIDE the periodic box so the whole 1×1×1 volume
+  // reads as a 3D object: cosmic web visible as a structure inside a
+  // wireframe cube, not a soup of giant sprites filling the viewport.
+  // Distance ≈ 2.6 (vs box diagonal ≈ 0.87) — box fills the centre of
+  // the viewport with breathing room around it.
+  camera.position.set(1.4, 0.9, 2.1);
   camera.lookAt(0, 0, 0);
-  // The render loop swaps `camera.layers` between BLOOM_LAYER (during the
-  // bloom pass) and "all layers" (during the final pass). We start in the
-  // all-layers state so any external code peeking at the camera gets the
-  // expected default.
   camera.layers.enableAll();
 
   const controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
-  controls.minDistance = 0.5;
+  controls.minDistance = 0.7;
   controls.maxDistance = 20;
   controls.rotateSpeed = 0.6;
   controls.zoomSpeed = 0.8;
   controls.enablePan = false;
-  controls.autoRotate = true;
-  controls.autoRotateSpeed = 0.45; // ≈ 1 rev / 90 s
+  // Static by default. Auto-rotate creates a per-frame visual delta that
+  // reads as "мельтешит" against the cosmic web — the user can grab and
+  // orbit if they want.
+  controls.autoRotate = false;
 
   // --- Bloom composer: renders only BLOOM_LAYER objects through a blur ---
 

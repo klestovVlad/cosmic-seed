@@ -66,10 +66,10 @@ export function createStarCloud(maxStars: number, dpr: number): StarCloud {
     vertexShader: VERT_SHADER,
     fragmentShader: FRAG_SHADER,
     uniforms: {
-      // Selective bloom on layer 1 already amplifies the glow; the sprite
-      // itself stays modest so stars don't look like cardboard cutouts at
-      // close camera angles.
-      uPointSize: { value: 160.0 },
+      // Selective bloom on layer 1 amplifies the glow, so the sprite
+      // itself can stay small. At the new camera distance the bloom
+      // halo reads as a star with depth instead of a giant disc.
+      uPointSize: { value: 100.0 },
       uPixelRatio: { value: Math.min(dpr, 2) },
     },
     transparent: true,

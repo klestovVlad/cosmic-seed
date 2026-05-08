@@ -76,20 +76,20 @@ export function createParticleCloud(count: number, dpr: number): ParticleCloud {
     vertexShader: VERT_SHADER,
     fragmentShader: FRAG_SHADER,
     uniforms: {
-      uPointSize: { value: 60.0 },
+      // Small sprite ≈ 22 px / -mvPosition.z. At the new camera distance
+      // (~2.6 from origin), DM particles read as discrete dots rather
+      // than overlapping bokeh blobs.
+      uPointSize: { value: 22.0 },
       uPixelRatio: { value: Math.min(dpr, 2) },
       uColorLo: { value: new THREE.Color('#2a1b3d') },
       uColorMid: { value: new THREE.Color('#5b3f8e') },
       uColorHi: { value: new THREE.Color('#9b7fe8') },
       uDensityMin: { value: 1e-3 },
       uDensityMax: { value: 1.0 },
-      // Additive blending stacks heavily in dense regions; with bloom
-      // selective-on-stars now (Stage 5/visual fix) the DM cloud no
-      // longer compounds with bloom, but pixels can still saturate to
-      // white through accumulation alone. Halving the per-sprite alpha
-      // keeps voids visible and gives halo cores a graded glow rather
-      // than a single white blob.
-      uOpacity: { value: 0.5 },
+      // Low per-sprite alpha so halo cores don't saturate to white
+      // through additive stacking alone. Density gradient still reads
+      // because the colour ramp + alpha → opaque-violet at peak density.
+      uOpacity: { value: 0.32 },
     },
     transparent: true,
     depthWrite: false,

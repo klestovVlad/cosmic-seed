@@ -90,7 +90,12 @@ const CPU_CONFIG: SimulationConfig = {
   gasSmoothingLength: 0.18,
 };
 
-const TAMED_PS = { ...PLANCK_2018_PS, sigma8: 0.5 };
+// σ_8 = 0.35 (vs Planck's 0.81): we deliberately under-amplify the IC
+// fluctuations so the field stays in a distributed cosmic-web regime
+// instead of collapsing into a single dominant halo within the first
+// 200 Myr. The educational beat is "see structure form across the box",
+// not "watch one mega-cluster eat the whole simulation".
+const TAMED_PS = { ...PLANCK_2018_PS, sigma8: 0.35 };
 
 // Seed picked deliberately: with σ_8 = 0.5 and a 16³ grid, only the
 // largest-wavelength Fourier modes carry meaningful amplitude, and some
