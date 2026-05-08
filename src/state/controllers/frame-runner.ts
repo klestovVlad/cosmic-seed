@@ -108,6 +108,11 @@ export function createGpuFrameRunner(ctx: GpuContext, config: SimulationConfig):
   let stepIndex = 0;
   let simTime = 0;
   let maxParticleDensity = 0;
+  let frameCounter = 0;
+  // Recompute density on the readback every Nth frame; the eye doesn't see
+  // the difference but the CPU spatial-grid rebuild is the largest non-GPU
+  // cost at 10k particles.
+  const DENSITY_REFRESH_EVERY = 6;
 
   // Energy computation in GPU mode is sampled (full O(N²) potential is too
   // expensive at 10k for a live readout). Stage 1c ships kinetic + momentum
@@ -137,13 +142,16 @@ export function createGpuFrameRunner(ctx: GpuContext, config: SimulationConfig):
       shadow.positions.set(positions);
       stepIndex += stepsPerFrame;
       simTime += stepsPerFrame * config.dt;
+      frameCounter += 1;
 
-      rebuildSpatialGrid(grid, shadow);
-      computeDensities(shadow, grid, kernel, densities);
-      let maxRho = 0;
-      for (const rho of densities) if (rho > maxRho) maxRho = rho;
-      if (maxRho > maxParticleDensity) maxParticleDensity = maxRho;
-      return { positions, densities, maxDensity: maxRho };
+      if (frameCounter % DENSITY_REFRESH_EVERY === 0) {
+        rebuildSpatialGrid(grid, shadow);
+        computeDensities(shadow, grid, kernel, densities);
+        let maxRho = 0;
+        for (const rho of densities) if (rho > maxRho) maxRho = rho;
+        if (maxRho > maxParticleDensity) maxParticleDensity = maxRho;
+      }
+      return { positions, densities, maxDensity: maxParticleDensity };
     },
 
     snapshot(): SimulationSnapshot {

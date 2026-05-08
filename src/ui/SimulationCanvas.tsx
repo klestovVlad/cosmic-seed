@@ -18,10 +18,11 @@ const HUD_REFRESH_INTERVAL_MS = 1000 / HUD_REFRESH_HZ;
 const GPU_CONFIG: SimulationConfig = {
   ...DEFAULT_CONFIG,
   count: 10000,
-  // Tighter softening — 10k uniformly in a unit sphere has a smaller mean
-  // particle separation, so the softening should follow.
-  softening: 0.02,
-  densityKernelRadius: 0.06,
+  // Mean inter-particle separation at 10k in a unit sphere ≈ 0.075.
+  // Softening half of that, density kernel ~1.5× so each particle reliably
+  // sees a handful of neighbours.
+  softening: 0.035,
+  densityKernelRadius: 0.11,
 };
 
 const CPU_CONFIG: SimulationConfig = DEFAULT_CONFIG;
@@ -48,6 +49,9 @@ export function SimulationCanvas(): React.JSX.Element {
       const runner: FrameRunner = useGpu
         ? createGpuFrameRunner(gpuCtx, config)
         : createCpuFrameRunner(config);
+      console.warn(
+        `[sim] mode=${runner.mode} particles=${String(runner.count)} dt=${String(config.dt)} softening=${String(config.softening)}`,
+      );
 
       useUiStore.getState().setGpuStatus(
         useGpu

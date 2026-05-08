@@ -25,7 +25,10 @@ struct SimParams {
 @group(0) @binding(4) var<storage, read> masses: array<f32>;
 
 const WG: u32 = 64u;
-var<workgroup> tilePos: array<vec3<f32>, WG>;
+// vec4 (not vec3) in workgroup memory: WGSL aligns vec3 to 16 bytes anyway,
+// and some Metal backends mis-handle vec3 workgroup arrays. Storing vec4
+// keeps everyone happy at no cost.
+var<workgroup> tilePos: array<vec4<f32>, WG>;
 var<workgroup> tileMass: array<f32, WG>;
 
 @compute @workgroup_size(WG)
@@ -46,17 +49,17 @@ fn forceMain(
   for (var t: u32 = 0u; t < numTiles; t = t + 1u) {
     let jGlobal = t * WG + lid.x;
     if (jGlobal < n) {
-      tilePos[lid.x] = positions[jGlobal].xyz;
+      tilePos[lid.x] = positions[jGlobal];
       tileMass[lid.x] = masses[jGlobal];
     } else {
-      tilePos[lid.x] = vec3<f32>(0.0, 0.0, 0.0);
+      tilePos[lid.x] = vec4<f32>(0.0, 0.0, 0.0, 0.0);
       tileMass[lid.x] = 0.0;
     }
     workgroupBarrier();
 
     let tileSize = min(WG, n - t * WG);
     for (var k: u32 = 0u; k < tileSize; k = k + 1u) {
-      let dx = tilePos[k] - posI;
+      let dx = tilePos[k].xyz - posI;
       let r2 = dot(dx, dx) + params.softening_sq;
       let invR = inverseSqrt(r2);
       let invR3 = invR * invR * invR;
