@@ -130,6 +130,8 @@ export function SimulationCanvas(): React.JSX.Element {
       let frames = 0;
       let lastSampleAt = performance.now();
       let lastDensityRange = { min: 1e-3, max: 1.0 };
+      let initialMaxDensity = 0;
+      useSimulationStore.getState().resetDensitySamples();
 
       const loop = createLoop(
         scene,
@@ -152,11 +154,21 @@ export function SimulationCanvas(): React.JSX.Element {
               await runner.refreshSnapshotAsync();
               const snap = runner.snapshot();
               const fps = (frames * 1000) / elapsed;
-              useSimulationStore.getState().setDiagnostics({
+              const store = useSimulationStore.getState();
+              store.setDiagnostics({
                 ...snap,
                 fps,
                 stepsPerSecond: (snap.step * 1000) / Math.max(now, 1),
               });
+              if (initialMaxDensity === 0 && snap.maxParticleDensity > 0) {
+                initialMaxDensity = snap.maxParticleDensity;
+              }
+              if (initialMaxDensity > 0 && snap.scaleFactor > 0) {
+                store.pushDensitySample({
+                  a: snap.scaleFactor,
+                  delta: snap.maxParticleDensity / initialMaxDensity,
+                });
+              }
               frames = 0;
               lastSampleAt = now;
             }

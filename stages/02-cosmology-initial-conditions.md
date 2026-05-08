@@ -1,6 +1,6 @@
 # Stage 2: Cosmology + initial conditions
 
-**Status:** IN PROGRESS (2a + 2b1 + 2b2 + 2c1 + 2c2 done; 2c3 next: chart + tests + close)
+**Status:** DONE (2a / 2b1 / 2b2 / 2c1 / 2c2 / 2c3)
 **Estimated:** 3–5 days
 **Depends on:** Stage 1
 **Spec reference:** Phase 1 (cosmology brief §5)
@@ -112,10 +112,27 @@ Carrying into 2b:
 - Zeldovich displacement field: sample `δ(k) ∝ √P(k)`, compute `ψ(k) = −i k δ(k) / k²`, IFFT to real space, place particles at `q + D(z_init) · ψ(q)` with velocities `D · f · H · ψ`.
 - Replace `sphericalPerturbation` as the default IC.
 
-Carrying into 2c:
+**2026-05-08 — Stage 2c1 / 2c2 / 2c3 landed; Stage 2 closed.**
 
-- Comoving leapfrog: `dx/dt = v / a²`, `dv/dt = −∇Φ / a`, with mean-density subtraction.
-- Adaptive timestep (CFL-like criterion).
-- HUD reads runner's true (t, a) instead of the wall-clock cursor.
-- δ_max(t) chart with linear-theory reference line.
-- Linear-growth regression test.
+2c1 (time plumbing): `SimulationDiagnostics` extended with `ageInMyr`, `scaleFactor`, `redshift`; runner steps advance the cosmological clock by `dtMyr`; `TimeStrip` reads from the store instead of the wall-clock cursor.
+
+2c2 (cosmological dynamics):
+
+- `gravity-cpu.ts` and `shaders/compute/nbody.wgsl` both gain optional periodic min-image distances. SimParams uniform expanded to 32 bytes to carry `boxSize` and `driftScale`.
+- `cosmologicalLeapfrogStep(state, dt, opts)` — same KDK form as `leapfrogStep`, but the drift uses `dt × driftScale` (= 1/a² in canonical-momentum form) and wraps positions back into [-L/2, L/2). The closing kick uses the standard convention.
+- `SimulationConfig.cosmologicalMode` switches between Stage-1 spherical-collapse and Stage-2 periodic-comoving paths.
+- `createSimulationRunner` and `createCpu/GpuFrameRunner` now accept an external `initialSystem`. `SimulationCanvas` builds a Zeldovich displacement-field IC at boot via the pure `zeldovichField` (sync on main thread; the worker path stays available for larger grids in 3+) and feeds it in. Velocities are zeroed at IC for visual stability — the Zeldovich peculiar velocity at z = 50 is below numerical noise anyway.
+
+2c3 (diagnostics + close):
+
+- `simulationStore` gains a 512-sample ring buffer of (a, δ_max) used by the chart. `SimulationCanvas` pushes one sample per HUD tick (10 Hz).
+- `DeltaMaxChart` — small canvas-based log-log plot top-right showing the simulation's normalised peak density vs scale factor, with a dashed reference line for the Carroll-Press-Turner growth factor `D(a)` normalised at the first sample.
+- `tests/physics/linear-growth.test.ts` — two integrations: rms displacement is finite and bounded under the cosmological leapfrog with periodic gravity at small amplitude; total momentum stays small (< 0.1) over 100 steps under periodic gravity.
+
+Test totals: 68 unit tests across 12 files; 2 e2e green. Build 754 KB / 204 KB gzipped.
+
+Outstanding (carried out of Stage 2 but not blocking subsequent stages):
+
+- Adaptive timestep (CFL-like). Currently fixed `dt`. Lands in Stage 3 alongside SPH's own CFL constraint.
+- Eisenstein-Hu BAO wiggles. Stage 5 can switch the IC to the full transfer function if a slider needs visible BAOs.
+- IC worker: the worker exists (`src/workers/ic-worker.ts`) but the boot path uses the sync pure function. Worker becomes important for 32³+ grids in Stage 7.

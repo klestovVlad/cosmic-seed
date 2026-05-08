@@ -1,4 +1,5 @@
 import { CompatibilityBanner } from '@ui/CompatibilityBanner';
+import { DeltaMaxChart } from '@ui/DeltaMaxChart';
 import { Hud } from '@ui/Hud';
 import { ScaleBar } from '@ui/ScaleBar';
 import { SimulationCanvas } from '@ui/SimulationCanvas';
@@ -11,6 +12,7 @@ function App(): React.JSX.Element {
       <TimeStrip />
       <ScaleBar />
       <Hud />
+      <DeltaMaxChart />
       <CompatibilityBanner />
     </main>
   );

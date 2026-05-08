@@ -23,16 +23,27 @@ export interface SimulationDiagnostics {
   readonly momentumMagnitude: number;
 }
 
+export interface DensitySample {
+  /** Scale factor at sample time. */
+  readonly a: number;
+  /** Max particle density relative to its initial value. δ_max(a) / δ_max(a_init). */
+  readonly delta: number;
+}
+
 export interface SimulationState {
   particleCount: number;
   isRunning: boolean;
   stepsPerFrame: number;
   diagnostics: SimulationDiagnostics;
+  /** Ring of (a, δ_max/δ_max_init) samples for the diagnostic chart. */
+  densitySamples: readonly DensitySample[];
 
   setParticleCount(n: number): void;
   setRunning(running: boolean): void;
   setStepsPerFrame(n: number): void;
   setDiagnostics(d: SimulationDiagnostics): void;
+  pushDensitySample(s: DensitySample): void;
+  resetDensitySamples(): void;
 }
 
 const emptyDiagnostics: SimulationDiagnostics = {
@@ -54,11 +65,14 @@ const emptyDiagnostics: SimulationDiagnostics = {
   momentumMagnitude: 0,
 };
 
+const MAX_DENSITY_SAMPLES = 512;
+
 export const useSimulationStore = create<SimulationState>((set) => ({
   particleCount: 0,
   isRunning: false,
   stepsPerFrame: 4,
   diagnostics: emptyDiagnostics,
+  densitySamples: [],
 
   setParticleCount: (n) => {
     set({ particleCount: n });
@@ -71,5 +85,17 @@ export const useSimulationStore = create<SimulationState>((set) => ({
   },
   setDiagnostics: (d) => {
     set({ diagnostics: d });
+  },
+  pushDensitySample: (s) => {
+    set((state) => {
+      const next =
+        state.densitySamples.length >= MAX_DENSITY_SAMPLES
+          ? [...state.densitySamples.slice(1), s]
+          : [...state.densitySamples, s];
+      return { densitySamples: next };
+    });
+  },
+  resetDensitySamples: () => {
+    set({ densitySamples: [] });
   },
 }));

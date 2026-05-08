@@ -4,20 +4,20 @@ Last updated: 2026-05-08
 
 ## At a glance
 
-| #   | Stage                                                                | Status      | Notes                                     |
-| --- | -------------------------------------------------------------------- | ----------- | ----------------------------------------- |
-| 00  | [Foundation](00-foundation.md)                                       | DONE        | scaffold, tooling, CI, Vercel deploy live |
-| 01  | [Gravity prototype](01-gravity-prototype.md)                         | IN PROGRESS | 1a/1b/1c landed. Cross-val test pending.  |
-| 02  | [Cosmology + initial conditions](02-cosmology-initial-conditions.md) | IN PROGRESS | 2a/2b1/2b2 landed. 2c: comoving leapfrog. |
-| 03  | [Baryons & SPH](03-baryons-sph.md)                                   | TODO        | gas, pressure, viscosity                  |
-| 04  | [Cooling, halos, first stars](04-cooling-halos-stars.md)             | TODO        | H₂ cooling, FoF, M_crit ignition          |
-| 05  | [Parameters & UI](05-parameters-ui.md)                               | TODO        | sliders, presets, URL share               |
-| 06  | [WDM, SIDM, streaming velocity](06-wdm-sidm-streaming.md)            | TODO        | dark-matter alternatives                  |
-| 07  | [Polish & deploy](07-polish-deploy.md)                               | TODO        | bloom, mobile, copy, prod deploy          |
+| #   | Stage                                                                | Status      | Notes                                                 |
+| --- | -------------------------------------------------------------------- | ----------- | ----------------------------------------------------- |
+| 00  | [Foundation](00-foundation.md)                                       | DONE        | scaffold, tooling, CI, Vercel deploy live             |
+| 01  | [Gravity prototype](01-gravity-prototype.md)                         | IN PROGRESS | 1a/1b/1c landed. Cross-val test pending.              |
+| 02  | [Cosmology + initial conditions](02-cosmology-initial-conditions.md) | DONE        | Zeldovich IC, periodic comoving leapfrog, δ_max chart |
+| 03  | [Baryons & SPH](03-baryons-sph.md)                                   | TODO        | gas, pressure, viscosity                              |
+| 04  | [Cooling, halos, first stars](04-cooling-halos-stars.md)             | TODO        | H₂ cooling, FoF, M_crit ignition                      |
+| 05  | [Parameters & UI](05-parameters-ui.md)                               | TODO        | sliders, presets, URL share                           |
+| 06  | [WDM, SIDM, streaming velocity](06-wdm-sidm-streaming.md)            | TODO        | dark-matter alternatives                              |
+| 07  | [Polish & deploy](07-polish-deploy.md)                               | TODO        | bloom, mobile, copy, prod deploy                      |
 
 ## Active stage
 
-**Stage 2 — Cosmology + IC.** Sub-stage 2a landed: cosmological branded units (Mpc, Msun, Myr, Redshift, ScaleFactor), Friedmann background (H(z), tOfA, aOfT, growth factor), time-strip + scale-bar UI from `EXPERIENCE.md §2`. 2b is the Zeldovich IC + Eisenstein–Hu power spectrum + FFT in a Web Worker; 2c is comoving leapfrog + adaptive timestep + δ_max chart. Simulation physics still in code units until 2c.
+**Stage 3 — Baryons & SPH.** Next up: gas as a second species, SPH density / pressure / artificial viscosity, gas particles colour-coded by temperature. Big visual jump — gas dissipates and stabilises halos, no more pulsation, JWST-style appearance starts here.
 
 Stage 1 stays open in parallel: cross-validation test (Playwright with WebGPU-enabled chromium), sampled potential-energy readout in GPU mode. Default GPU count tuned to 5 k after user testing.
 
@@ -27,6 +27,9 @@ _None._ One UX nit from Stage 0: Vercel project still has Deployment Protection 
 
 ## Recent activity
 
+- 2026-05-08 — Stage 2c3 / Stage 2 closed: δ_max(a) chart with Carroll-Press-Turner reference line, linear-growth regression test, density-sample ring buffer in the store. 68 unit tests + 2 e2e green.
+- 2026-05-08 — Stage 2c2: cosmological dynamics live. Periodic min-image gravity (CPU + WGSL), `cosmologicalLeapfrogStep` with `1/a²` drift scale, Zeldovich IC as default, runner refactored to accept external particles. Visual: spherical-collapse single blob → multiple discrete halos forming on Zeldovich seeds.
+- 2026-05-08 — Stage 2c1: cosmic time bookkeeping. SimulationDiagnostics carries ageInMyr, scaleFactor, redshift; runner advances cosmological clock by dtMyr; TimeStrip reads from store instead of wall-clock.
 - 2026-05-08 — Stage 2b2: Zeldovich displacement-field IC generator (`zeldovich-ic.ts`) — white-noise → forward FFT → δ(k) = η · √P / V*cell → ψ*α(k) = -i·k_α/k²·δ → inverse FFT → particles at q + D·ψ. Web Worker (`ic-worker.ts`) wraps it with a typed message contract; `ic-runner.ts` is the typed Promise wrapper. 9 statistical tests (σ_8 scaling, D scaling, seed determinism, mass conservation). Worker is shipped as code; integration into `frame-runner` lands in 2c when comoving leapfrog can keep the field stable.
 - 2026-05-08 — Stage 2b1: Eisenstein-Hu transfer function + power spectrum with σ_8 normalisation, in-house Cooley-Tukey 1D + 3D FFT on Float32Array, 18 unit tests.
 - 2026-05-08 — Stage 2a: cosmology math (`cosmology.ts` — H(z), tOfA, aOfT, growth factor, growth rate), cosmological branded units, time-strip UI (z + age + speed-of-time + progress bar), scale-bar widget (Mpc + Mly), Expert/Explained label-pair scaffolding. 18 cosmology unit tests; 37 total green. Visual checkpoint refreshed.
