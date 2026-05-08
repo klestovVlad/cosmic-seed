@@ -76,7 +76,7 @@ export function createGasCloud(gasCount: number, dpr: number): GasCloud {
     vertexShader: VERT_SHADER,
     fragmentShader: FRAG_SHADER,
     uniforms: {
-      uPointSize: { value: 90.0 },
+      uPointSize: { value: 55.0 },
       uPixelRatio: { value: Math.min(dpr, 2) },
       uTempMin: { value: 1e-3 },
       uTempMax: { value: 1.0 },

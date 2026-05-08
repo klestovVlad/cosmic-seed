@@ -7,13 +7,19 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
 /**
- * Layer mask for objects that should bloom. Only the star cloud opts in;
- * DM and gas particle clouds stay on layer 0 only and are rendered as
- * black during the bloom pass so they don't contribute luminance to the
- * blur kernel — UnrealBloomPass would otherwise treat the additive-
- * blended DM density spikes as bloomable, drowning the cosmic web in a
- * single white halo. Three.js examples ship the same selective-bloom
- * pattern (`webgl_postprocessing_unreal_bloom_selective`).
+ * Layer mask for objects that should bloom. Only the star cloud opts in.
+ *
+ * Selective-bloom approach: we run two render passes with the same camera
+ * but different `camera.layers` masks. The bloom pass renders ONLY layer
+ * BLOOM_LAYER (stars), gets blurred by UnrealBloomPass, and writes to a
+ * texture. The final pass renders all layers normally and additively
+ * composites the bloom texture on top.
+ *
+ * No material swaps — the camera-layer filter at the renderer's culling
+ * stage is precise (and side-effect-free) where the swap-and-restore
+ * pattern produces black-square artifacts on `THREE.Points` because
+ * `MeshBasicMaterial` doesn't speak the points' gl_PointSize / sprite
+ * vocabulary.
  */
 export const BLOOM_LAYER = 1;
 
@@ -22,8 +28,8 @@ export interface SceneHandle {
   readonly scene: THREE.Scene;
   readonly camera: THREE.PerspectiveCamera;
   readonly controls: OrbitControls;
-  /** Render the layered bloom pipeline. Replaces the per-frame
-   *  `composer.render()` call from before selective bloom landed. */
+  /** Layered selective-bloom render. Replaces the old per-frame
+   *  `composer.render()`. */
   render(): void;
   resize(width: number, height: number, dpr: number): void;
   dispose(): void;
@@ -44,7 +50,9 @@ const COMPOSITE_FRAG = /* glsl */ `
   void main() {
     vec4 base = texture2D(baseTexture, vUv);
     vec4 bloom = texture2D(bloomTexture, vUv);
-    gl_FragColor = base + bloom;
+    // Add bloom RGB to base RGB; preserve base alpha so the canvas keeps
+    // its transparency for any non-rendered pixels.
+    gl_FragColor = vec4(base.rgb + bloom.rgb, base.a);
   }
 `;
 
@@ -67,8 +75,10 @@ export function createScene(canvas: HTMLCanvasElement): SceneHandle {
   // viewport shows the interior of the simulated volume.
   camera.position.set(0.7, 0.45, 1.05);
   camera.lookAt(0, 0, 0);
-  // Camera renders all layers; the bloom-pass swap happens at the material
-  // level, not via camera layers.
+  // The render loop swaps `camera.layers` between BLOOM_LAYER (during the
+  // bloom pass) and "all layers" (during the final pass). We start in the
+  // all-layers state so any external code peeking at the camera gets the
+  // expected default.
   camera.layers.enableAll();
 
   const controls = new OrbitControls(camera, canvas);
@@ -82,23 +92,7 @@ export function createScene(canvas: HTMLCanvasElement): SceneHandle {
   controls.autoRotate = true;
   controls.autoRotateSpeed = 0.45; // ≈ 1 rev / 90 s
 
-  // --- Selective-bloom pipeline ----------------------------------------
-  //
-  // Two composers chain like so:
-  //
-  //   bloomComposer:  RenderPass (with non-bloom objects darkened)
-  //                 → UnrealBloomPass (writes its blurred output to
-  //                                    bloomComposer.renderTarget2)
-  //
-  //   finalComposer:  RenderPass (full scene, normal materials)
-  //                 → composite ShaderPass (adds bloomComposer's texture)
-  //                 → OutputPass (tone map + sRGB)
-  //
-  // Per frame we traverse the scene once to swap non-BLOOM_LAYER objects'
-  // materials to a black MeshBasicMaterial, render bloomComposer, restore
-  // materials, render finalComposer. Cost: one extra RenderPass + the
-  // bloom passes' downsamples. At 4 k DM particles this is well inside
-  // budget (the bloom kernel is 5 mips of 1280×800 quads).
+  // --- Bloom composer: renders only BLOOM_LAYER objects through a blur ---
 
   const bloomComposer = new EffectComposer(renderer);
   bloomComposer.renderToScreen = false;
@@ -107,12 +101,14 @@ export function createScene(canvas: HTMLCanvasElement): SceneHandle {
     new THREE.Vector2(1, 1),
     /* strength */ 1.1,
     /* radius   */ 0.55,
-    // Threshold can drop now that DM/gas are pre-darkened: stars are the
-    // only luminance left in the bloom render, so a low threshold gives
-    // them headroom to glow while costing nothing on the dark cloud.
+    // Threshold can be 0 because the bloom pass renders only layer 1
+    // (stars). DM and gas are simply not rendered there — they don't need
+    // to be darkened or thresholded out.
     /* threshold*/ 0.0,
   );
   bloomComposer.addPass(bloom);
+
+  // --- Final composer: full scene + bloom-overlay composite -----------
 
   const compositePass = new ShaderPass(
     new THREE.ShaderMaterial({
@@ -133,34 +129,16 @@ export function createScene(canvas: HTMLCanvasElement): SceneHandle {
   finalComposer.addPass(compositePass);
   finalComposer.addPass(new OutputPass());
 
-  // --- Material swap for the bloom pass --------------------------------
-
-  const bloomLayer = new THREE.Layers();
-  bloomLayer.set(BLOOM_LAYER);
-  const darkMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
-  const stashedMaterials = new Map<string, THREE.Material | THREE.Material[]>();
-
-  function darkenIfNotBloom(obj: THREE.Object3D): void {
-    // Points + Mesh + Line all expose `.material`. Skip anything else.
-    const candidate = obj as THREE.Object3D & { material?: THREE.Material | THREE.Material[] };
-    if (candidate.material === undefined) return;
-    if (bloomLayer.test(obj.layers)) return; // opted-in, leave bright
-    stashedMaterials.set(obj.uuid, candidate.material);
-    candidate.material = darkMaterial;
-  }
-
-  function restoreMaterial(obj: THREE.Object3D): void {
-    const stashed = stashedMaterials.get(obj.uuid);
-    if (stashed === undefined) return;
-    const candidate = obj as THREE.Object3D & { material: THREE.Material | THREE.Material[] };
-    candidate.material = stashed;
-    stashedMaterials.delete(obj.uuid);
-  }
-
   const render = (): void => {
-    scene.traverse(darkenIfNotBloom);
+    // Bloom pass: camera sees only layer BLOOM_LAYER. DM, gas, box-frame —
+    // none of them are on this layer, so RenderPass renders nothing for
+    // them. Stars opt in (`object.layers.enable(BLOOM_LAYER)`), get
+    // rendered, then UnrealBloomPass blurs the result.
+    camera.layers.set(BLOOM_LAYER);
     bloomComposer.render();
-    scene.traverse(restoreMaterial);
+    // Final pass: camera sees all layers, normal scene render, then
+    // additively composite the bloom texture, then tone-map to sRGB.
+    camera.layers.enableAll();
     finalComposer.render();
   };
 
@@ -181,7 +159,6 @@ export function createScene(canvas: HTMLCanvasElement): SceneHandle {
     controls.dispose();
     bloomComposer.dispose();
     finalComposer.dispose();
-    darkMaterial.dispose();
     renderer.dispose();
   };
 

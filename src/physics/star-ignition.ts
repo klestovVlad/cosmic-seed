@@ -25,6 +25,16 @@ export interface IgnitionParams {
   readonly v_bc: number;
   /** Code-unit mass that corresponds to 1 M☉ — multiplies the formula's M☉. */
   readonly unitMassPerMsun: number;
+  /**
+   * Maximum redshift at which ignition is allowed. Defaults to 30 — the
+   * Kulkarni+2021 fit is calibrated on z ∈ [10, 20] and extrapolates
+   * unphysically high (smaller M_crit) at z ≫ 20, while the Zeldovich IC
+   * already contains visibly clumpy overdensities at z = 50. Without
+   * this gate, FoF + Kulkarni produce "first ignition" reports at z ≈ 47
+   * the moment the halo finder fires, blowing the educational beat that
+   * stars light up *during* a viewable run.
+   */
+  readonly maxIgnitionRedshift?: number;
 }
 
 export function criticalHaloMass(z: Redshift, p: IgnitionParams): number {
@@ -98,6 +108,9 @@ export function igniteEligibleHalos(
 ): IgnitionResult {
   const newStars: Star[] = [];
   const newlyLit: number[] = [];
+  const zNum = asNumber(z);
+  const zCap = params.maxIgnitionRedshift ?? 30;
+  if (zNum > zCap) return { newStars, newlyLit };
   const mCrit = criticalHaloMass(z, params);
   for (let i = 0; i < halos.length; i += 1) {
     const halo = halos[i];
