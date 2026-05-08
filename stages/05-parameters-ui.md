@@ -1,6 +1,6 @@
 # Stage 5: Parameters & UI
 
-**Status:** IN PROGRESS (5a — Expert/Explained labels + toggle — shipped)
+**Status:** IN PROGRESS (5a labels+toggle, 5b parameter schema + sliders + URL — shipped)
 **Estimated:** 1 week
 **Depends on:** Stage 4
 **Spec reference:** Phase 4 (cosmology brief §2, §3)
@@ -121,5 +121,51 @@ Promote the simulation from "runs with hard-coded parameters" to "interactive te
 - [x] HUD reads from registry — 28 labels flip across the page.
 - [ ] Plain-language tooltips on every parameter — needs the parameter
       panel from 5b.
+
+### 5b — parameter schema + slider panel + URL hydration (2026-05-08)
+
+- `src/state/parameters/schema.ts`: literal-typed `PARAMETER_SCHEMA`
+  with 4 entries (σ_8, J_LW, v_bc, maxStars). Each spec carries the
+  label key (auto-flips Expert/Explained), short URL key, group, range,
+  step, default, `requiresRegen` flag. `clampValue` rounds integer
+  params and snaps numbers to the step grid. Adding a parameter is one
+  schema entry + one labels.ts pair + tests pass.
+- `src/state/parametersStore.ts`: Zustand store with separate
+  `committed` + `pending` views. Live params (`!requiresRegen`) commit
+  immediately on slider drag; regen params buffer in `pending` until
+  the user hits "Regenerate". `runId` increments on commitRegen so
+  SimulationCanvas's mount effect tears down and rebuilds with the
+  new IC.
+- `src/state/parameters/url.ts`: versioned URL serialiser
+  (`?v=1&s8=0.5&jlw=100&...`). Default values are _omitted_ from the
+  URL so a fresh-page link stays empty. Schema-version mismatch drops
+  all params back to defaults — better than silently misapplying old
+  keys to new fields.
+- `src/ui/controls/ParameterSlider.tsx` + `ControlsPanel.tsx`:
+  collapsible left-side panel grouped by physics topic. Pending regen
+  values render with an asterisk + amber colour and a "Regenerate" /
+  "Cancel" button bar appears when any regen param differs from
+  committed.
+- `src/ui/SimulationCanvas.tsx`: hydrates parametersStore from the URL
+  on mount, mirrors committed values back into the URL via
+  `history.replaceState`, and subscribes to live param changes to
+  mutate the runner's config in place. Effect dependency on
+  `parametersStore.runId` makes commitRegen trigger a full sim
+  rebuild.
+- 13 new unit tests (schema label coverage, unique URL keys, default
+  bounds; clampValue range / round / step; URL round-trip including
+  default omission; preservation of unrelated query params; schema-
+  version mismatch drop). 166 unit + 3 e2e green.
+- Verified end-to-end in live preview: slider drives the runner,
+  URL updates, reload hydrates, regen flow restarts the sim.
+
+#### Acceptance status (after 5b)
+
+- [x] σ_8 / J_LW / v_bc / maxStars sliders wired to the live runner.
+- [x] URL serialisation versioned + lossless round-trip.
+- [x] Regen-required parameters surface a "Regenerate" button.
+- [x] All UI tests pass (`tests/ui/parameters.test.ts`).
+- [ ] Full §2-brief parameter coverage (Ω_m, Ω_b, n_s, h, DM type,
+      seed, gridN, dt, softening) — lands in 5c alongside presets.
 - [ ] Mass / length anchors in HUD — Stage-4b mass anchors already
       ship; length anchors arrive in 5e with the chart captions.

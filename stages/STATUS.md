@@ -1,25 +1,25 @@
 # Status — source of truth
 
-Last updated: 2026-05-08 (post Stage 5a)
+Last updated: 2026-05-08 (post Stage 5b)
 
 ## At a glance
 
-| #   | Stage                                                                | Status      | Notes                                                                                            |
-| --- | -------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------ |
-| 00  | [Foundation](00-foundation.md)                                       | DONE        | scaffold, tooling, CI, Vercel deploy live                                                        |
-| 01  | [Gravity prototype](01-gravity-prototype.md)                         | IN PROGRESS | 1a/1b/1c landed. Cross-val test pending.                                                         |
-| 02  | [Cosmology + initial conditions](02-cosmology-initial-conditions.md) | DONE        | Zeldovich IC, periodic comoving leapfrog, δ_max chart                                            |
-| 03  | [Baryons & SPH](03-baryons-sph.md)                                   | DONE\*      | 3a/3b: CPU SPH + T-coloured gas. 3c/3d: GPU SPH + shock test deferred.                           |
-| 04  | [Cooling, halos, first stars](04-cooling-halos-stars.md)             | DONE\*      | 4a/4b/4c/4c2/4d shipped. Event bus + HUD top-3 + Expert/Explained deferred to 5/7.               |
-| 05  | [Parameters & UI](05-parameters-ui.md)                               | IN PROGRESS | 5a labels+toggle shipped. 5b sliders / 5c presets / 5d timeline / 5e charts / 5f toasts pending. |
-| 06  | [WDM, SIDM, streaming velocity](06-wdm-sidm-streaming.md)            | TODO        | dark-matter alternatives                                                                         |
-| 07  | [Polish & deploy](07-polish-deploy.md)                               | TODO        | bloom, mobile, copy, prod deploy                                                                 |
+| #   | Stage                                                                | Status      | Notes                                                                                               |
+| --- | -------------------------------------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------- |
+| 00  | [Foundation](00-foundation.md)                                       | DONE        | scaffold, tooling, CI, Vercel deploy live                                                           |
+| 01  | [Gravity prototype](01-gravity-prototype.md)                         | IN PROGRESS | 1a/1b/1c landed. Cross-val test pending.                                                            |
+| 02  | [Cosmology + initial conditions](02-cosmology-initial-conditions.md) | DONE        | Zeldovich IC, periodic comoving leapfrog, δ_max chart                                               |
+| 03  | [Baryons & SPH](03-baryons-sph.md)                                   | DONE\*      | 3a/3b: CPU SPH + T-coloured gas. 3c/3d: GPU SPH + shock test deferred.                              |
+| 04  | [Cooling, halos, first stars](04-cooling-halos-stars.md)             | DONE\*      | 4a/4b/4c/4c2/4d shipped. Event bus + HUD top-3 + Expert/Explained deferred to 5/7.                  |
+| 05  | [Parameters & UI](05-parameters-ui.md)                               | IN PROGRESS | 5a labels, 5b schema+sliders+URL shipped. 5c presets / 5d timeline / 5e charts / 5f toasts pending. |
+| 06  | [WDM, SIDM, streaming velocity](06-wdm-sidm-streaming.md)            | TODO        | dark-matter alternatives                                                                            |
+| 07  | [Polish & deploy](07-polish-deploy.md)                               | TODO        | bloom, mobile, copy, prod deploy                                                                    |
 
 ## Active stage
 
 **Stage 4 — Cooling, halos, first stars.** Closed (DONE\*) with 4a (FoF + Kulkarni+2021 ignition + star cloud + first-ignition banner), 4b (UnrealBloomPass + in-scene annotation pins with mass anchors), 4c (Galli-Palla H₂ cooling + code↔physical unit adapter + cooling integration with subcycling), 4c2 (per-particle H₂ tracker — Galli-Palla H⁻ formation, Abel-1997 LW dissociation, implicit-Euler), and 4d (acceptance suite + Stage-4 visual checkpoint). Deferred items rolled into Stage 5/7 docs: event bus (Stage 5/7 consumers live there), HUD top-3 halos with R_vir + Expert/Explained registers (Stage 5 with the parameter UI), cosmic-web filament pin (needs long-axis detector), full Saslaw-Zipoy network with H + H⁺ pathway / collisional dissociation / LW self-shielding (matters only T ≳ 5000 K or in shielded cores).
 
-**Stage 5 — Parameters & UI.** 5a (Expert/Explained label-pair registry + URL/localStorage persistence + toolbar toggle + HUD refactor — 28 labels now flip register) shipped. Next: 5b — parameter schema + parametersStore + slider panel wired to the live runner with regen-needed dialog. 5c presets, 5d timeline + checkpoints, 5e diagnostic charts, 5f tooltips + toasts.
+**Stage 5 — Parameters & UI.** 5a (Expert/Explained labels + toolbar toggle) and 5b (parameter schema for σ_8 / J_LW / v_bc / maxStars + parametersStore with committed/pending split + versioned URL serialisation + slider panel + regen flow + SimulationCanvas hydration & live-param subscription) shipped. Next: 5c — presets (Standard / No DM / WDM / Strong LW) + share-URL button. 5d timeline + checkpoints, 5e diagnostic charts, 5f tooltips + toasts.
 
 Stage 1 stays open in parallel (cross-validation test, sampled potential-energy readout in GPU mode). Stage 3 closed with two deferred items: 3c (WGSL SPH compute kernels for the GPU path — currently GPU mode is DM-only, gas only visible on CPU fallback) and 3d (Sod shock-tube test + isothermal-collapse self-similar test). Both are physics-quality items, not blocking the Stage-4 visual story.
 
@@ -29,6 +29,7 @@ _None._ One UX nit from Stage 0: Vercel project still has Deployment Protection 
 
 ## Recent activity
 
+- 2026-05-08 — Stage 5b: parameter schema + slider panel + versioned URL + regen flow. `src/state/parameters/schema.ts` literal-typed PARAMETER_SCHEMA with σ_8 (regen) / J_LW / v_bc / maxStars; clampValue snaps to step grid + bounds. `parametersStore.ts` Zustand with committed/pending split, runId bump on commitRegen. `parameters/url.ts` versioned `?v=1&s8=…&jlw=…`, defaults omitted from URL. `controls/ControlsPanel.tsx` + `ParameterSlider.tsx` left-side panel with cosmology/baryons/first-stars groups + Regenerate button when pending. SimulationCanvas hydrates from URL on mount, subscribes for live-param mutations, restarts on runId change. 166 unit (13 new) + 3 e2e green. End-to-end verified in live preview: J_LW slider drives runner ↔ URL round-trip ↔ σ_8 regen restarts sim.
 - 2026-05-08 — Stage 5a: Expert/Explained label-pair registry + toolbar toggle. `src/ui/i18n/labels.ts` is the literal-typed const map for every on-screen physics label (28 entries); `getLabel(key, mode)` is the pure lookup. `src/ui/i18n/expert-mode-url.ts` carries URL ↔ localStorage persistence with URL-beats-storage precedence and parameter-omitted-for-default to keep shared URLs minimal. `ExpertToggle` mounts top-left as a two-cell pill that sync's back through history.replaceState. HUD refactored: 28 hard-coded `<Stat label="...">` strings became `<LabeledStat labelKey="..." />` so flipping Expert ↔ Explained re-labels in place (`−T/U` ↔ `virial ratio`, `ρ central` ↔ `central density`, …). DECISIONS.md gains the 5a/5b/5c/5d/5e/5f split rationale. 153 unit (16 new) + 3 e2e green.
 - 2026-05-08 — Stage 4d: acceptance suite + Stage 4 closes. `tests/physics/cosmological-run.test.ts` drives the runner through fiducial / extreme-LW (J = 1e15 → starCount = 0) / single-DM scenarios. `tests/e2e/stage-04-checkpoint.spec.ts` captures `docs/checkpoints/stage-04.png` after an 8-s settle. Stage 4 marked DONE\* with deferred items (event bus, HUD top-3 halos, cosmic-web pin, Expert/Explained registers) explicitly rolled into Stage 5/7 — none block v1's educational story. 140 unit + 3 e2e green.
 - 2026-05-08 — Stage 4c2: per-particle H₂ network. `src/physics/h2-network.ts` ships rate-limited H⁻ formation (Galli-Palla 1998, k_f = 1.43e-18 · T^0.93 cm³/s) + Abel-1997 LW dissociation (k_d = 1.4e-12 · J_21 s⁻¹) with Tegmark+1997 freeze-out x_e = 2e-4, integrated by a one-step implicit Euler clamped into [1e-6, 0.1]. Simulation runner evolves x_H₂ per particle each step before the cooling pass — so cool-dense halo cores genuinely build up the coolant and accelerate cooling, while diffuse IGM stays near the floor. Snapshot adds `gasMaxH2Fraction` + `gasMeanH2Fraction`; HUD gas card shows `x_H₂ peak`. 137 unit (9 new) + 2 e2e green.

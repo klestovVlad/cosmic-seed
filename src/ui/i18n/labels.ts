@@ -168,6 +168,31 @@ export const LABELS = {
     explained: 'age of universe',
     tooltip: 'Time since the Big Bang.',
   },
+
+  // Stage 5b — parameter labels for the Controls panel.
+  sigma8: {
+    expert: 'σ_8',
+    explained: 'IC fluctuation amp.',
+    tooltip:
+      'Initial-fluctuation amplitude. Planck-measured ≈ 0.81; we under-amplify here so structure has time to grow.',
+  },
+  jLW: {
+    expert: 'J_LW',
+    explained: 'Lyman-Werner background',
+    tooltip: 'Photon background that destroys H₂ — higher value delays first-star ignition.',
+  },
+  vbc: {
+    expert: 'v_bc',
+    explained: 'streaming velocity',
+    tooltip:
+      'Baryon-DM relative velocity at recombination — raises the halo mass needed to ignite.',
+  },
+  maxStars: {
+    expert: 'max stars',
+    explained: 'star count cap',
+    tooltip:
+      'Cap on Pop III ignitions. Educational beat: 0–3 = "first stars", higher reveals the cooling cascade.',
+  },
 } as const satisfies Record<string, LabelPair>;
 
 export type LabelKey = keyof typeof LABELS;

@@ -7,6 +7,8 @@ import { createLoop } from '@rendering/loop';
 import { initWebGpu } from '@rendering/gpu/device';
 import { useSimulationStore } from '@state/simulationStore';
 import { useUiStore } from '@state/uiStore';
+import { useParametersStore } from '@state/parametersStore';
+import { deserialiseParameters, serialiseParameters } from '@state/parameters/url';
 import {
   createCpuFrameRunner,
   createGpuFrameRunner,
@@ -87,14 +89,11 @@ const CPU_CONFIG: SimulationConfig = {
   gasSmoothingLength: 0.18,
 };
 
-// σ_8 = 0.22 (vs Planck's 0.81): we deliberately under-amplify the IC
-// fluctuations so structure has to *grow* during the viewing window
-// rather than already being mostly collapsed at z = 50. Lower σ_8
-// means a more uniform-looking IC that gradually develops dense knots
-// — the educational beat is "watch the cosmic web form", and that
-// requires the field to actually evolve over viewable time, not be a
-// near-static collapsed blob from the first frame.
-const TAMED_PS = { ...PLANCK_2018_PS, sigma8: 0.22 };
+// σ_8 default falls in via parametersStore; see PARAMETER_SCHEMA.sigma8
+// for the chosen 0.22 default and rationale.
+function tamedPowerSpectrum(sigma8: number): typeof PLANCK_2018_PS {
+  return { ...PLANCK_2018_PS, sigma8 };
+}
 
 // Seed search: with σ_8 = 0.35 on a 16³ grid only a handful of the
 // longest-wavelength modes carry visible amplitude, so the seed
@@ -104,23 +103,30 @@ const TAMED_PS = { ...PLANCK_2018_PS, sigma8: 0.22 };
 // the dominant mode along ~(1, 0.5, 0.4) — neither axis-aligned nor
 // face-bound, so the resulting halos sit interior to the box and the
 // cosmic web reads as a 3-D structure rather than a wall artefact.
-const ZELDOVICH_PARAMS_GPU = {
-  cosmology: PLANCK_2018,
-  powerSpectrum: TAMED_PS,
-  seed: 271828,
-  gridN: GPU_GRID,
-  boxSizeMpcH: 1.0,
-  zInit: redshift(50),
-};
+function zeldovichParamsFor(
+  sigma8: number,
+  gridN: number,
+): {
+  cosmology: typeof PLANCK_2018;
+  powerSpectrum: typeof PLANCK_2018_PS;
+  seed: number;
+  gridN: number;
+  boxSizeMpcH: number;
+  zInit: ReturnType<typeof redshift>;
+} {
+  return {
+    cosmology: PLANCK_2018,
+    powerSpectrum: tamedPowerSpectrum(sigma8),
+    seed: 271828,
+    gridN,
+    boxSizeMpcH: 1.0,
+    zInit: redshift(50),
+  };
+}
 
-const ZELDOVICH_PARAMS_CPU = {
-  ...ZELDOVICH_PARAMS_GPU,
-  gridN: CPU_GRID,
-};
-
-function buildZeldovichInitialSystem(useGpu: boolean): ParticleSystem {
+function buildZeldovichInitialSystem(useGpu: boolean, sigma8: number): ParticleSystem {
   const config = useGpu ? GPU_CONFIG : CPU_CONFIG;
-  const zParams = useGpu ? ZELDOVICH_PARAMS_GPU : ZELDOVICH_PARAMS_CPU;
+  const zParams = zeldovichParamsFor(sigma8, useGpu ? GPU_GRID : CPU_GRID);
   const dmIc = zeldovichField(zParams);
   const dmCount = dmIc.positions.length / 4;
 
@@ -181,6 +187,42 @@ export function SimulationCanvas(): React.JSX.Element {
   // the latest canvas size without re-creating the loop on resize.
   const canvasSizeRef = useRef<{ width: number; height: number }>({ width: 1, height: 1 });
 
+  // Stage 5b: parameters store drives the runner config. `runId` bumps
+  // when the user commits a regen-required parameter change (or the
+  // store is hydrated from a URL with non-defaults), forcing this whole
+  // effect to tear down and rebuild — which is what "regenerate the IC"
+  // means in our model.
+  const runId = useParametersStore((s) => s.runId);
+
+  // Hydrate the parametersStore from `?s8=…&jlw=…` on first mount.
+  // Schedule the hydrate via `setTimeout(0)` so the setState happens out
+  // of the effect body — keeps the React-hooks/set-state-in-effect
+  // linter quiet and matches the ExpertToggle's pattern.
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const fromUrl = deserialiseParameters(window.location.search);
+    if (Object.keys(fromUrl).length === 0) return undefined;
+    const id = window.setTimeout(() => {
+      useParametersStore.getState().hydrate(fromUrl);
+    }, 0);
+    return () => {
+      window.clearTimeout(id);
+    };
+  }, []);
+
+  // Mirror committed values into the URL query string. Only non-default
+  // values are written; the search string stays empty for a fresh run.
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const unsub = useParametersStore.subscribe((state, prev) => {
+      if (state.committed === prev.committed) return;
+      const search = serialiseParameters(state.committed, window.location.search);
+      const url = window.location.pathname + search + window.location.hash;
+      window.history.replaceState(null, '', url);
+    });
+    return unsub;
+  }, []);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (canvas === null) return;
@@ -196,8 +238,18 @@ export function SimulationCanvas(): React.JSX.Element {
       }
 
       const useGpu = gpuCtx !== null;
-      const config = useGpu ? GPU_CONFIG : CPU_CONFIG;
-      const initialSystem = buildZeldovichInitialSystem(useGpu);
+      const baseConfig = useGpu ? GPU_CONFIG : CPU_CONFIG;
+      // Apply the committed parameter values to the base config. Live
+      // params (J_LW, v_bc, maxStars) are also pushed into the runner's
+      // config object on every store change below.
+      const initialParams = useParametersStore.getState().committed;
+      const config: SimulationConfig = {
+        ...baseConfig,
+        ignitionJ_LW: initialParams.ignitionJ_LW,
+        ignitionVbc: initialParams.ignitionVbc,
+        maxStars: initialParams.maxStars,
+      };
+      const initialSystem = buildZeldovichInitialSystem(useGpu, initialParams.sigma8);
       const runner: FrameRunner = useGpu
         ? createGpuFrameRunner(gpuCtx, config, initialSystem)
         : createCpuFrameRunner(config, initialSystem);
@@ -413,10 +465,26 @@ export function SimulationCanvas(): React.JSX.Element {
 
       handleResize();
       window.addEventListener('resize', handleResize);
+
+      // Live-parameter push: subscribe to parametersStore.committed and
+      // mutate the runner's config in place. Cast away `readonly` —
+      // both runners read these via `config.x` on each FoF / ignition
+      // pass, so writes take effect on the next pass without a restart.
+      const mutableConfig = config as {
+        -readonly [K in keyof SimulationConfig]: SimulationConfig[K];
+      };
+      const unsubscribeLive = useParametersStore.subscribe((state, prev) => {
+        if (state.committed === prev.committed) return;
+        mutableConfig.ignitionJ_LW = state.committed.ignitionJ_LW;
+        mutableConfig.ignitionVbc = state.committed.ignitionVbc;
+        mutableConfig.maxStars = state.committed.maxStars;
+      });
+
       loop.start();
 
       cleanup = (): void => {
         loop.stop();
+        unsubscribeLive();
         useSimulationStore.getState().setRunning(false);
         window.removeEventListener('resize', handleResize);
         dmCloud.dispose();
@@ -434,7 +502,9 @@ export function SimulationCanvas(): React.JSX.Element {
       lifecycle.cancelled = true;
       cleanup?.();
     };
-  }, []);
+    // runId bumps on commitRegen → full tear-down + rebuild with the
+    // new IC parameters (σ_8 etc.).
+  }, [runId]);
 
   return (
     <>

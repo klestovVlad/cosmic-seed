@@ -1,4 +1,5 @@
 import { CompatibilityBanner } from '@ui/CompatibilityBanner';
+import { ControlsPanel } from '@ui/controls/ControlsPanel';
 import { DeltaMaxChart } from '@ui/DeltaMaxChart';
 import { ExpertToggle } from '@ui/ExpertToggle';
 import { Hud } from '@ui/Hud';
@@ -15,6 +16,7 @@ function App(): React.JSX.Element {
       <ScaleBar />
       <Hud />
       <DeltaMaxChart />
+      <ControlsPanel />
       <CompatibilityBanner />
     </main>
   );
