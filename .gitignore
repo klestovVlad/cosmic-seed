@@ -1,0 +1,48 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+.yarn/
+
+# build output
+dist/
+build/
+.next/
+out/
+
+# env
+.env
+.env.local
+.env.*.local
+.env.production
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# editor / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+*.swo
+Thumbs.db
+
+# testing & coverage
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+
+# vite / vitest
+.vite/
+.vitest/
+*.tsbuildinfo
+
+# Claude Code local
+.claude/local/
