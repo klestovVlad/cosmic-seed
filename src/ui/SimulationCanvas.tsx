@@ -22,6 +22,7 @@ import {
   redshift,
   zeldovichField,
 } from '@physics/index';
+import { AnnotationPins, type AnnotationPinsHandle } from './AnnotationPins';
 
 const HUD_REFRESH_HZ = 10;
 const HUD_REFRESH_INTERVAL_MS = 1000 / HUD_REFRESH_HZ;
@@ -153,6 +154,10 @@ function buildZeldovichInitialSystem(useGpu: boolean): ParticleSystem {
 
 export function SimulationCanvas(): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const pinsRef = useRef<AnnotationPinsHandle | null>(null);
+  // Pinned to a ref so the loop closure (created once on mount) can read
+  // the latest canvas size without re-creating the loop on resize.
+  const canvasSizeRef = useRef<{ width: number; height: number }>({ width: 1, height: 1 });
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -251,6 +256,10 @@ export function SimulationCanvas(): React.JSX.Element {
               starCloud.syncStars(frame.stars);
             }
           },
+          onRender(s): void {
+            const size = canvasSizeRef.current;
+            pinsRef.current?.updatePinScreenPositions(s.camera, size.width, size.height);
+          },
           async onFrame(): Promise<void> {
             frames += 1;
             const now = performance.now();
@@ -289,6 +298,7 @@ export function SimulationCanvas(): React.JSX.Element {
         const w = canvas.clientWidth;
         const h = canvas.clientHeight;
         const dpr = window.devicePixelRatio;
+        canvasSizeRef.current = { width: w, height: h };
         scene.resize(w, h, dpr);
         dmCloud.resize(dpr);
         gasCloud?.resize(dpr);
@@ -322,10 +332,13 @@ export function SimulationCanvas(): React.JSX.Element {
   }, []);
 
   return (
-    <canvas
-      ref={canvasRef}
-      data-testid="simulation-canvas"
-      className="absolute inset-0 z-0 block h-full w-full"
-    />
+    <>
+      <canvas
+        ref={canvasRef}
+        data-testid="simulation-canvas"
+        className="absolute inset-0 z-0 block h-full w-full"
+      />
+      <AnnotationPins ref={pinsRef} unitMassPerMsun={GPU_CONFIG.unitMassPerMsun} />
+    </>
   );
 }

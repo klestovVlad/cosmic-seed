@@ -158,10 +158,18 @@ export interface SimulationSnapshot {
   readonly haloCount: number;
   /** Largest halo mass in code units, or 0 if no halos. */
   readonly largestHaloMass: number;
+  /** Centre (code-unit position) of the most massive halo, null if none. */
+  readonly largestHaloCentre: { x: number; y: number; z: number } | null;
   /** Number of stars currently lit (cumulative). */
   readonly starCount: number;
-  /** First-ignition event: { z, mass } in M☉, or null if nothing has lit yet. */
-  readonly firstIgnition: { redshift: number; haloMassMsun: number } | null;
+  /** First-ignition event: { z, mass } in M☉ + code-unit position. */
+  readonly firstIgnition: {
+    readonly redshift: number;
+    readonly haloMassMsun: number;
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  } | null;
 }
 
 export interface SimulationRunner {
@@ -299,7 +307,7 @@ export function createSimulationRunner(
   };
   let latestHalos: Halo[] = [];
   const stars: Star[] = [];
-  let firstIgnition: { redshift: number; haloMassMsun: number } | null = null;
+  let firstIgnition: SimulationSnapshot['firstIgnition'] = null;
   let lastHaloFinderStep = -1;
 
   /** Has the halo at `cx,cy,cz,rVir` already lit a star? Spatial proximity test. */
@@ -346,6 +354,9 @@ export function createSimulationRunner(
         firstIgnition = {
           redshift: first.redshift,
           haloMassMsun: first.hostHaloMass / config.unitMassPerMsun,
+          x: first.x,
+          y: first.y,
+          z: first.z,
         };
       }
     }
@@ -444,6 +455,10 @@ export function createSimulationRunner(
         ...gasStats(),
         haloCount: latestHalos.length,
         largestHaloMass: latestHalos[0]?.mass ?? 0,
+        largestHaloCentre:
+          latestHalos[0] !== undefined
+            ? { x: latestHalos[0].cx, y: latestHalos[0].cy, z: latestHalos[0].cz }
+            : null,
         starCount: stars.length,
         firstIgnition,
       };

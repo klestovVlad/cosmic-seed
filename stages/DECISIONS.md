@@ -15,6 +15,26 @@ Format:
 
 ---
 
+## 2026-05-08 — Stage 4 splits into 4a / 4b / 4c / 4d
+
+**Status:** accepted
+**Context:** Stage 4 covers H₂ cooling (table + Saslaw-Zipoy fraction network + LW background dependence), the FoF halo finder, the Kulkarni+2021 critical-mass formula and ignition logic, star particle rendering with bloom, and an event bus + in-scene annotation pins from `EXPERIENCE.md` §3 + §5. That's the largest stage still ahead — physics, rendering, and copy/UI all in one. Splitting it follows the 3a/3b/3c/3d precedent.
+**Decision:**
+
+- **4a** (already shipped): FoF + Kulkarni+2021 ignition + star cloud + HUD halos-and-stars card + amber first-ignition banner. Physics (`halo-finder.ts`, `star-ignition.ts`) and the bare-bones star renderer.
+- **4b** (this push): UnrealBloomPass (selective high-threshold) on the star cloud so the white sprites read as actual luminous sources; in-scene annotation pins for the largest halo and the first ignition with mass-anchor strings from `EXPERIENCE.md` §3; pure pin builder + projection helper extracted into `src/ui/annotation-pin-builder.ts` so the surface is unit-testable independently from React.
+- **4c**: H₂ cooling table + simplified Saslaw–Zipoy fraction network + Lyman-Werner background coupling + cooling integration in the SPH energy step (with subcycling cap). Affects M_crit via `f_LW`. Cooling-table interpolation regression test + LW=100 ignition-delay regression test.
+- **4d**: event bus for milestone toasts (linear-to-nonlinear, first-turnaround, first-halo, cosmic-web-visible, first-ignition, nth-ignition), "no DM" regression test (Ω_DM = 0 → zero halos by z = 10), updated visual checkpoint at `docs/checkpoints/stage-04.png`. Stage 4 closes.
+
+**Alternatives considered:**
+
+- _Land 4 in one push._ Rejected — the same pattern as 3a/3b/3c/3d. Cooling has its own numerical-stability footguns (negative T after a too-aggressive subcycle, runaway H₂ formation in dense clumps); shipping the FoF-and-ignition layer first means we can verify halos and stars are sane before the cooling channel introduces more knobs.
+- _Skip the bloom pass and just brighten the star sprites._ Rejected — the educational beat is "first stars in the universe lit up", which needs an actual luminous-source feel. A point sprite at intensity 1.0 reads as a sticker; a bloomed sprite reads as a star. UnrealBloomPass at threshold ≥ 0.78 keeps the bloom selective so DM/gas don't smear.
+
+**Consequences:** Four pushes for Stage 4 instead of one, each visually progressive. 4a is the "halo finder works, here are the white star points" beat; 4b is the "they actually glow and the universe explains itself" beat; 4c is the "the gas can cool" mechanic; 4d is the certification + event-bus surface that Stage 5/7 will subscribe to for walkthrough cues.
+
+---
+
 ## 2026-05-08 — Stage 3 splits into 3a / 3b / 3c / 3d
 
 **Status:** accepted

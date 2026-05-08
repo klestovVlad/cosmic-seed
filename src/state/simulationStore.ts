@@ -28,8 +28,19 @@ export interface SimulationDiagnostics {
   /** Stage 4: halo + star diagnostics. */
   readonly haloCount: number;
   readonly largestHaloMass: number;
+  /** Code-unit centre of the most massive halo, or null when no halos exist.
+   *  Used by the in-scene annotation pin (EXPERIENCE.md §3). */
+  readonly largestHaloCentre: { x: number; y: number; z: number } | null;
   readonly starCount: number;
-  readonly firstIgnition: { redshift: number; haloMassMsun: number } | null;
+  /** First-ignition event. Position is in code-unit space; the pin overlay
+   *  projects it back to screen each frame. */
+  readonly firstIgnition: {
+    readonly redshift: number;
+    readonly haloMassMsun: number;
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  } | null;
 }
 
 export interface DensitySample {
@@ -77,6 +88,7 @@ const emptyDiagnostics: SimulationDiagnostics = {
   gasMaxInternalEnergy: 0,
   haloCount: 0,
   largestHaloMass: 0,
+  largestHaloCentre: null,
   starCount: 0,
   firstIgnition: null,
 };

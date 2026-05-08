@@ -1,11 +1,16 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 export interface SceneHandle {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene: THREE.Scene;
   readonly camera: THREE.PerspectiveCamera;
   readonly controls: OrbitControls;
+  readonly composer: EffectComposer;
   resize(width: number, height: number, dpr: number): void;
   dispose(): void;
 }
@@ -46,17 +51,39 @@ export function createScene(canvas: HTMLCanvasElement): SceneHandle {
   controls.autoRotate = true;
   controls.autoRotateSpeed = 0.45; // ≈ 1 rev / 90 s
 
+  // Postprocessing chain: render → bloom → tone-map/sRGB output.
+  // UnrealBloomPass with a high luminance threshold so only the bright cores
+  // of the star sprites cross it — DM (violet, dark) and most gas (blue→
+  // orange) stay unbloomed. Stars then read as actual luminous sources.
+  // Threshold/strength/radius tuned empirically for the white star core
+  // (rgb(1.0, 0.96, 0.85) × intensity, additive) to produce a soft halo
+  // without smearing the cosmic-web background.
+  const composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  const bloom = new UnrealBloomPass(
+    new THREE.Vector2(1, 1),
+    /* strength */ 0.85,
+    /* radius   */ 0.55,
+    /* threshold*/ 0.78,
+  );
+  composer.addPass(bloom);
+  composer.addPass(new OutputPass());
+
   const resize = (width: number, height: number, dpr: number): void => {
     renderer.setPixelRatio(Math.min(dpr, 2));
     renderer.setSize(width, height, false);
+    composer.setPixelRatio(Math.min(dpr, 2));
+    composer.setSize(width, height);
+    bloom.setSize(width, height);
     camera.aspect = width / Math.max(1, height);
     camera.updateProjectionMatrix();
   };
 
   const dispose = (): void => {
     controls.dispose();
+    composer.dispose();
     renderer.dispose();
   };
 
-  return { renderer, scene, camera, controls, resize, dispose };
+  return { renderer, scene, camera, controls, composer, resize, dispose };
 }

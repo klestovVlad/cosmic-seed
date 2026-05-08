@@ -185,6 +185,7 @@ export function createGpuFrameRunner(
     gasMaxInternalEnergy: 0,
     haloCount: 0,
     largestHaloMass: 0,
+    largestHaloCentre: null,
     starCount: 0,
     firstIgnition: null,
   };
@@ -261,6 +262,7 @@ export function createGpuFrameRunner(
         gasMaxInternalEnergy: 0,
         haloCount: 0,
         largestHaloMass: 0,
+        largestHaloCentre: null,
         starCount: 0,
         firstIgnition: null,
       };

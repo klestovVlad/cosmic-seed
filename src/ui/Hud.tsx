@@ -1,4 +1,5 @@
 import { useSimulationStore } from '@state/simulationStore';
+import { formatSolarMass as fmtMass, massAnchor } from './mass-anchor';
 import { Stat } from './Stat';
 
 function fmt(n: number, digits = 3): string {
@@ -11,23 +12,6 @@ function fmt(n: number, digits = 3): string {
 function fmtPercent(n: number, digits = 3): string {
   if (!Number.isFinite(n)) return '—';
   return `${(n * 100).toFixed(digits)}%`;
-}
-
-function fmtMass(mSun: number): string {
-  if (!Number.isFinite(mSun) || mSun <= 0) return '—';
-  if (mSun < 1e3) return `${mSun.toFixed(0)} M☉`;
-  if (mSun < 1e6) return `${(mSun / 1e3).toFixed(1)} k M☉`;
-  if (mSun < 1e9) return `${(mSun / 1e6).toFixed(1)} M M☉`;
-  return `${(mSun / 1e9).toFixed(2)} G M☉`;
-}
-
-function massAnchor(mSun: number): string {
-  if (mSun < 1e5) return 'pre-galactic seed';
-  if (mSun < 1e6) return '≈ globular-cluster mass';
-  if (mSun < 1e7) return '≈ dwarf-galaxy seed';
-  if (mSun < 1e9) return '≈ early dwarf galaxy';
-  if (mSun < 1e11) return '≈ Milky-Way progenitor';
-  return '≈ massive galaxy halo';
 }
 
 export function Hud(): React.JSX.Element {

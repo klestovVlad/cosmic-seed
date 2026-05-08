@@ -16,6 +16,10 @@ export interface LoopHooks {
   runFrame(stepsPerFrame: number): void | Promise<void>;
   /** Optional per-frame callback for HUD updates. Throttled by the caller. */
   onFrame?: ((dtMs: number) => void | Promise<void>) | undefined;
+  /** Optional sync callback fired right after each render — use it to update
+   *  DOM overlays that mirror the camera (annotation pins, screen-space
+   *  labels). Must be cheap; it runs on every frame. */
+  onRender?: ((scene: SceneHandle) => void) | undefined;
 }
 
 export function createLoop(
@@ -36,7 +40,8 @@ export function createLoop(
     await hooks.runFrame(stepsPerFrame);
 
     scene.controls.update();
-    scene.renderer.render(scene.scene, scene.camera);
+    scene.composer.render();
+    hooks.onRender?.(scene);
 
     await hooks.onFrame?.(dt);
 

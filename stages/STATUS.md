@@ -1,6 +1,6 @@
 # Status — source of truth
 
-Last updated: 2026-05-08
+Last updated: 2026-05-08 (post Stage 4b)
 
 ## At a glance
 
@@ -10,14 +10,14 @@ Last updated: 2026-05-08
 | 01  | [Gravity prototype](01-gravity-prototype.md)                         | IN PROGRESS | 1a/1b/1c landed. Cross-val test pending.                               |
 | 02  | [Cosmology + initial conditions](02-cosmology-initial-conditions.md) | DONE        | Zeldovich IC, periodic comoving leapfrog, δ_max chart                  |
 | 03  | [Baryons & SPH](03-baryons-sph.md)                                   | DONE\*      | 3a/3b: CPU SPH + T-coloured gas. 3c/3d: GPU SPH + shock test deferred. |
-| 04  | [Cooling, halos, first stars](04-cooling-halos-stars.md)             | TODO        | H₂ cooling, FoF, M_crit ignition                                       |
+| 04  | [Cooling, halos, first stars](04-cooling-halos-stars.md)             | IN PROGRESS | 4a/4b shipped (FoF, ignition, bloom, in-scene pins). 4c/4d pending.    |
 | 05  | [Parameters & UI](05-parameters-ui.md)                               | TODO        | sliders, presets, URL share                                            |
 | 06  | [WDM, SIDM, streaming velocity](06-wdm-sidm-streaming.md)            | TODO        | dark-matter alternatives                                               |
 | 07  | [Polish & deploy](07-polish-deploy.md)                               | TODO        | bloom, mobile, copy, prod deploy                                       |
 
 ## Active stage
 
-**Stage 4 — Cooling, halos, first stars.** Next: H₂ cooling, friends-of-friends halo finder, M_crit ignition criterion (Kulkarni+2021), star particles rendered as bright white points with bloom. Star ignition is the big educational beat — "this is when the first stars in the universe lit up".
+**Stage 4 — Cooling, halos, first stars.** 4a (FoF + Kulkarni+2021 ignition + star cloud + halos-and-stars HUD card + first-ignition banner) and 4b (UnrealBloomPass on the star sprites + in-scene annotation pins for the largest halo and the first ignition with mass-anchor strings from EXPERIENCE.md §3) are shipped. Next: 4c — H₂ cooling channel + Saslaw-Zipoy network + LW background coupling, then 4d — acceptance tests (no-DM regression, J_LW=100 delay, cooling-rate published values, halo-mass-fn smoke).
 
 Stage 1 stays open in parallel (cross-validation test, sampled potential-energy readout in GPU mode). Stage 3 closed with two deferred items: 3c (WGSL SPH compute kernels for the GPU path — currently GPU mode is DM-only, gas only visible on CPU fallback) and 3d (Sod shock-tube test + isothermal-collapse self-similar test). Both are physics-quality items, not blocking the Stage-4 visual story.
 
@@ -27,6 +27,8 @@ _None._ One UX nit from Stage 0: Vercel project still has Deployment Protection 
 
 ## Recent activity
 
+- 2026-05-08 — Stage 4b: UnrealBloomPass on the star cloud (selective high-threshold bloom — DM and gas stay clean, only the bright white star core glows) + in-scene annotation pins. Pure pin builder + projection helpers in `src/ui/annotation-pin-builder.ts`, React overlay in `AnnotationPins.tsx` with imperative per-frame screen-position updates. Snapshot now carries `largestHaloCentre` and `firstIgnition.{x,y,z}` so pins anchor in 3D space; the largest-halo pin tracks the most massive halo live, and the first-ignition pin shows for 3 wall-clock seconds at the ignition site with z + M☉ + mass-anchor (`≈ dwarf-galaxy seed`). 112 unit + 2 e2e green.
+- 2026-05-08 — Stage 4a: FoF halo finder (`src/physics/halo-finder.ts`) with periodic min-image distances + mass-weighted unwrapped halo centres. Kulkarni+2021 critical-mass criterion in `src/physics/star-ignition.ts`. Halo finder runs every K physics steps; halos crossing M_crit spawn star particles, rendered as a sparse `THREE.Points` cloud (white additive). HUD gains a "halos & stars" card; first ignition triggers an amber banner with z + M_halo. 100 unit + 2 e2e green.
 - 2026-05-08 — Stage 3 closed (3c/3d deferred): two-species hydrodynamics on the CPU path. SPH cubic-spline kernel + density estimator + symmetrised pressure-gradient force + adiabatic energy update; gas particles render in a separate THREE.Points cloud with a blue→cyan→orange→white temperature ramp; HUD gains a gas section (mass fraction, mean/max u, compression-heating amplification). 86 unit tests + 2 e2e green. GPU mode stays DM-only until the WGSL SPH kernels (3c) ship.
 - 2026-05-08 — Stage 2c3 / Stage 2 closed: δ_max(a) chart with Carroll-Press-Turner reference line, linear-growth regression test, density-sample ring buffer in the store. 68 unit tests + 2 e2e green.
 - 2026-05-08 — Stage 2c2: cosmological dynamics live. Periodic min-image gravity (CPU + WGSL), `cosmologicalLeapfrogStep` with `1/a²` drift scale, Zeldovich IC as default, runner refactored to accept external particles. Visual: spherical-collapse single blob → multiple discrete halos forming on Zeldovich seeds.

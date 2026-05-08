@@ -80,4 +80,82 @@ Make the gas able to cool, find halos, and ignite the first stars. Add primordia
 
 ## Notes / learnings
 
-_(filled during work)_
+### 4a — FoF + ignition + star cloud (2026-05-08)
+
+- `src/physics/halo-finder.ts`: friends-of-friends with min-image periodic
+  distances and a mass-weighted halo centre that unwraps via a per-halo
+  reference particle (boxes that straddle a face still report a sane
+  centre). Linking length `b · ⟨l⟩` with `b = 0.2`; halos < `minMembers`
+  are dropped as numerical noise. R_vir from spherical-overdensity Δ = 200.
+- `src/physics/star-ignition.ts`: Kulkarni+2021 critical-mass formula with
+  the `f_LW` and `f_vbc` corrections. `igniteEligibleHalos` walks the halo
+  list and marks each one that crosses `M_crit` AND hasn't been lit
+  before; we currently use spatial proximity (`r < R_vir`) as the "is this
+  halo already lit" check rather than persistent FoF identifiers, since
+  FoF root indices aren't stable across passes.
+- `src/state/controllers/simulation-runner.ts`: halo finder runs every K
+  physics steps (default 50). New diagnostics: `haloCount`,
+  `largestHaloMass`, `starCount`, `firstIgnition`. Stars accumulate in a
+  list owned by the runner; the frame runner forwards a read-only handle.
+- `src/rendering/star-cloud.ts`: a sparse `THREE.Points` with per-star
+  luminosity + position attributes. `aLuminosity = 0` collapses unused
+  slots. White additive blending until 4b drops a bloom pass on top.
+- HUD: new "halos & stars" card with halo count, largest M, star count,
+  first-ignition z + M_halo (with mass-anchor hint). Amber banner appears
+  when first ignition fires.
+- 100 unit tests + 2 e2e green. Visual on CPU: violet DM + temperature-
+  ramped gas + white star points at the centres of halos that crossed
+  M_crit. GPU still DM-only (Stage 3c will lift gas to GPU, then 4 will
+  port the halo finder if the budget needs it).
+
+### 4b — bloom + in-scene annotation pins (2026-05-08)
+
+- `src/rendering/scene.ts`: postprocessing pipeline now goes
+  RenderPass → UnrealBloomPass → OutputPass via an `EffectComposer`. The
+  bloom threshold (0.78) is tuned high enough that DM violet sprites and
+  most gas don't bloom; the white star core (additive, intensity → 1.0)
+  crosses the threshold and gets a soft halo. `loop.ts` now renders
+  through `composer.render()` and gained an `onRender(scene)` hook so the
+  DOM overlay can sync to the latest camera each frame.
+- `src/ui/mass-anchor.ts`: pulled the "≈ dwarf-galaxy seed" lookup out of
+  the HUD so the pins, the HUD, and the future end-of-run summary all
+  share one source of truth (EXPERIENCE.md §3).
+- `src/ui/annotation-pin-builder.ts`: pure helpers `buildPins` +
+  `projectWorldToViewport`. Splitting the pure surface from the React
+  component keeps fast-refresh happy and makes the projection contract
+  unit-testable (it's just `THREE.Vector3.project()` plus an NDC→viewport
+  flip — but a regression here would silently mis-place every pin).
+- `src/ui/AnnotationPins.tsx`: the overlay component. React renders a
+  `<div>` per pin and exposes an imperative `updatePinScreenPositions`
+  handle that the render loop calls every frame to set
+  `style.transform = translate3d(u·W, v·H, 0)`. No React state in the hot
+  path; the only renders happen when `pins[]` itself changes (label
+  mass anchor changes when the largest halo shifts buckets, or the
+  ignition window flips visible→hidden).
+- Snapshot extension: `largestHaloCentre: {x, y, z} | null` and
+  `firstIgnition.{x, y, z}` so the pin overlay has a 3D anchor without
+  reaching back into the runner. GPU snapshot keeps both null until 4
+  ports the halo finder GPU-side.
+- Ignition window lifecycle: a `useEffect` listens for
+  `diagnostics.firstIgnition` becoming non-null, schedules a
+  3-second `setTimeout` that flips `visible: false`, and is keyed off the
+  ignition reference so it survives sim re-render flutter. Wall-clock
+  timer is intentional — pin lifetime shouldn't stretch when the user
+  changes sim speed.
+- Tests: 4 new (mass-anchor buckets + formatter; buildPins; projection
+  axis/centre/behind). 112 unit + 2 e2e green.
+
+#### Acceptance status
+
+- [x] Stars look like glowing sources (UnrealBloomPass at threshold 0.78,
+      strength 0.85, radius 0.55 — selective on the bright star core).
+- [x] In-scene "← largest halo · M☉ · ≈ dwarf-galaxy seed" pin tracks the
+      most massive halo's centre live (updated each frame via the camera
+      projection; React only re-renders when the label changes bucket).
+- [x] First-ignition pin appears at the ignition position with z and
+      M_halo + mass-anchor, fades after 3 seconds.
+- [x] Existing visual paths (DM violet, gas temperature ramp, box frame)
+      unchanged. Bloom threshold high enough that DM/gas don't smear.
+- [ ] Cooling, H₂ network, J_LW dependence, FoF cooling test, halo-mass
+      fn, no-DM regression — still TODO; come in 4c (cooling) and 4d
+      (acceptance suite + visual checkpoint).
