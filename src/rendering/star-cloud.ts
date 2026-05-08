@@ -80,9 +80,9 @@ export function createStarCloud(maxStars: number, dpr: number): StarCloud {
     vertexShader: VERT_SHADER,
     fragmentShader: FRAG_SHADER,
     uniforms: {
-      // Bigger sprite so the cross-rays have pixels to work with at the
-      // new camera distance. Selective bloom layer further amplifies.
-      uPointSize: { value: 220.0 },
+      // Big sprite so the cross-rays have pixels to work with at any
+      // sensible camera distance. Selective bloom layer further amplifies.
+      uPointSize: { value: 320.0 },
       uPixelRatio: { value: Math.min(dpr, 2) },
     },
     transparent: true,

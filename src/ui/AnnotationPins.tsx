@@ -26,10 +26,26 @@ import {
   type PinAnchor,
 } from './annotation-pin-builder';
 
+export interface UnwrapTransform {
+  /** Centre that the renderer's particle unwrap is currently anchored to.
+   *  Pin anchors are min-image-translated by this same target so they
+   *  follow the visible cosmic web instead of staying at the raw
+   *  simulation coordinate (which would drift off-screen as the renderer
+   *  re-centres on the dominant halo). */
+  readonly target: { readonly x: number; readonly y: number; readonly z: number };
+  /** Box side length used by the periodic min-image. */
+  readonly boxSize: number;
+}
+
 export interface AnnotationPinsHandle {
   /** Re-project all pins from world to screen using the current camera +
    *  canvas size. Call from the render loop after each frame. */
-  updatePinScreenPositions(camera: THREE.Camera, width: number, height: number): void;
+  updatePinScreenPositions(
+    camera: THREE.Camera,
+    width: number,
+    height: number,
+    unwrap: UnwrapTransform,
+  ): void;
 }
 
 interface AnnotationPinsProps {
@@ -119,12 +135,28 @@ export function AnnotationPins({ ref, unitMassPerMsun }: AnnotationPinsProps): R
   useImperativeHandle(
     ref,
     () => ({
-      updatePinScreenPositions(camera, width, height): void {
+      updatePinScreenPositions(camera, width, height, unwrap): void {
         const map = pinNodesRef.current;
+        const halfBox = unwrap.boxSize * 0.5;
+        const minImage = (delta: number): number => {
+          let d = delta;
+          if (d > halfBox) d -= unwrap.boxSize;
+          else if (d < -halfBox) d += unwrap.boxSize;
+          return d;
+        };
         for (const pin of pins) {
           const node = map.get(pin.id);
           if (node === undefined) continue;
-          const proj = projectWorldToViewport(pin.anchor, camera);
+          // Apply the same min-image unwrap the renderer applies to
+          // particles, so the pin's leader points at the visible halo
+          // (origin-centred in scene space) rather than the raw
+          // simulation coordinate the snapshot recorded.
+          const unwrapped = {
+            x: minImage(pin.anchor.x - unwrap.target.x),
+            y: minImage(pin.anchor.y - unwrap.target.y),
+            z: minImage(pin.anchor.z - unwrap.target.z),
+          };
+          const proj = projectWorldToViewport(unwrapped, camera);
           if (proj === null || proj.behind) {
             node.style.opacity = '0';
             continue;

@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
 import { createScene } from '@rendering/scene';
-import { createBoxFrame } from '@rendering/box-frame';
 import { createGasCloud, type GasCloud } from '@rendering/gas-cloud';
 import { createParticleCloud, type ParticleCloud } from '@rendering/particle-cloud';
 import { createStarCloud, type StarCloud } from '@rendering/star-cloud';
@@ -221,14 +220,17 @@ export function SimulationCanvas(): React.JSX.Element {
       const gasCloud: GasCloud | null =
         runner.gasCount > 0 ? createGasCloud(runner.gasCount, window.devicePixelRatio) : null;
       if (gasCloud !== null) scene.scene.add(gasCloud.object);
-      // Stage 4: star cloud sized for far more capacity than we'll use; ignited
-      // halos appear as bright white points at their centres.
       const starCloud: StarCloud | null = config.cosmologicalMode
         ? createStarCloud(256, window.devicePixelRatio)
         : null;
       if (starCloud !== null) scene.scene.add(starCloud.object);
-      const boxFrame = config.cosmologicalMode ? createBoxFrame(config.boxHalfExtent) : null;
-      if (boxFrame !== null) scene.scene.add(boxFrame.object);
+      // The wireframe cube was a numerical artefact — the periodic-
+      // boundary box used by the simulation, not a physical structure.
+      // It actively hurt comprehension: halos that straddled the box
+      // wall read as "two halos glued to opposite faces". We keep the
+      // periodic physics but drop the visual cube; particles are
+      // unwrapped around the camera target below so a halo on the
+      // periodic boundary appears as one connected structure.
 
       const store = useSimulationStore.getState();
       store.setParticleCount(runner.count);
@@ -243,16 +245,86 @@ export function SimulationCanvas(): React.JSX.Element {
 
       const dmPositionsBytes = runner.dmCount * 4;
       const gasPositionsByteStart = dmPositionsBytes;
-      const gasPositionsByteEnd = gasPositionsByteStart + runner.gasCount * 4;
+
+      // --- Periodic-unwrap render transform -----------------------------
+      //
+      // Simulation lives in a periodic [-L/2, L/2]³ box. Visually we
+      // don't want to show the box; we want the user's view to follow the
+      // most massive halo so the action stays in frame. To keep the
+      // cosmic web *connected* across the periodic boundary (a halo that
+      // straddles the wall must read as one structure, not two), every
+      // particle gets unwrapped around the live camera target via
+      // min-image: dx = (raw - target) wrapped into [-L/2, L/2].
+      //
+      // The target lerps slowly toward the snapshot's largestHaloCentre
+      // so a sudden halo-rank swap (rare) doesn't jolt the view.
+      const boxSize = 2 * config.boxHalfExtent;
+      const halfBox = config.boxHalfExtent;
+      const unwrapTarget = { x: 0, y: 0, z: 0 };
+      const TARGET_LERP = 0.04; // ~ 0.5 s time-constant at 60 fps
+      const unwrappedDmPositions = new Float32Array(runner.dmCount * 4);
+      const unwrappedGasPositions = new Float32Array(runner.gasCount * 4);
+
+      const minImageDelta = (delta: number): number => {
+        let d = delta;
+        if (d > halfBox) d -= boxSize;
+        else if (d < -halfBox) d += boxSize;
+        return d;
+      };
+
+      const unwrapPositionsAroundTarget = (
+        src: Float32Array,
+        srcOffsetBytes: number,
+        count: number,
+        out: Float32Array,
+      ): void => {
+        const tx = unwrapTarget.x;
+        const ty = unwrapTarget.y;
+        const tz = unwrapTarget.z;
+        for (let i = 0; i < count; i += 1) {
+          const off = srcOffsetBytes / 4 + i * 4;
+          const dx = minImageDelta((src[off] ?? 0) - tx);
+          const dy = minImageDelta((src[off + 1] ?? 0) - ty);
+          const dz = minImageDelta((src[off + 2] ?? 0) - tz);
+          const dst = i * 4;
+          out[dst] = dx;
+          out[dst + 1] = dy;
+          out[dst + 2] = dz;
+          out[dst + 3] = 0;
+        }
+      };
+
+      // Star cloud takes a struct array; build a small unwrapped buffer.
+      const unwrapStars = (
+        stars: readonly { x: number; y: number; z: number; mass: number }[],
+      ): { x: number; y: number; z: number; mass: number }[] =>
+        stars.map((s) => ({
+          x: minImageDelta(s.x - unwrapTarget.x),
+          y: minImageDelta(s.y - unwrapTarget.y),
+          z: minImageDelta(s.z - unwrapTarget.z),
+          mass: s.mass,
+        }));
 
       const loop = createLoop(
         scene,
         {
           async runFrame(stepsPerFrame): Promise<void> {
             const frame = await runner.runFrame(stepsPerFrame);
-            // DM cloud: first dmCount particles + their density buffer.
-            const dmPositions = frame.positions.subarray(0, dmPositionsBytes);
-            dmCloud.syncPositions(dmPositions);
+
+            // Update unwrap target: lerp toward the snapshot's largest-
+            // halo centre via min-image so we don't drift through wraps.
+            const halo = runner.snapshot().largestHaloCentre;
+            if (halo !== null) {
+              unwrapTarget.x += minImageDelta(halo.x - unwrapTarget.x) * TARGET_LERP;
+              unwrapTarget.y += minImageDelta(halo.y - unwrapTarget.y) * TARGET_LERP;
+              unwrapTarget.z += minImageDelta(halo.z - unwrapTarget.z) * TARGET_LERP;
+            }
+
+            // DM cloud: unwrap positions around the target so the halo
+            // sits at the scene origin and surrounding structure reads as
+            // a connected web (no periodic-wall split).
+            unwrapPositionsAroundTarget(frame.positions, 0, runner.dmCount, unwrappedDmPositions);
+            dmCloud.syncPositions(unwrappedDmPositions);
             dmCloud.syncDensities(frame.densities);
             if (frame.maxDensity > lastDensityRange.max) {
               const min = Math.max(1e-3, frame.maxDensity * 1e-2);
@@ -260,13 +332,14 @@ export function SimulationCanvas(): React.JSX.Element {
               lastDensityRange = { min, max: frame.maxDensity };
             }
             if (gasCloud !== null && runner.gasCount > 0) {
-              const gasPositions = frame.positions.subarray(
+              unwrapPositionsAroundTarget(
+                frame.positions,
                 gasPositionsByteStart,
-                gasPositionsByteEnd,
+                runner.gasCount,
+                unwrappedGasPositions,
               );
-              gasCloud.syncPositions(gasPositions);
+              gasCloud.syncPositions(unwrappedGasPositions);
               gasCloud.syncTemperatures(frame.gasInternalEnergy);
-              // Track temperature range for the colormap window.
               let maxT = 0;
               for (const t of frame.gasInternalEnergy) if (t > maxT) maxT = t;
               if (maxT > lastTempRange.max) {
@@ -276,12 +349,15 @@ export function SimulationCanvas(): React.JSX.Element {
               }
             }
             if (starCloud !== null) {
-              starCloud.syncStars(frame.stars);
+              starCloud.syncStars(unwrapStars(frame.stars));
             }
           },
           onRender(s): void {
             const size = canvasSizeRef.current;
-            pinsRef.current?.updatePinScreenPositions(s.camera, size.width, size.height);
+            pinsRef.current?.updatePinScreenPositions(s.camera, size.width, size.height, {
+              target: unwrapTarget,
+              boxSize,
+            });
           },
           async onFrame(): Promise<void> {
             frames += 1;
@@ -341,7 +417,6 @@ export function SimulationCanvas(): React.JSX.Element {
         dmCloud.dispose();
         gasCloud?.dispose();
         starCloud?.dispose();
-        boxFrame?.dispose();
         scene.dispose();
         runner.destroy();
         gpuCtx?.destroy();

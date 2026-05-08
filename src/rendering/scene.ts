@@ -102,14 +102,11 @@ export function createScene(canvas: HTMLCanvasElement): SceneHandle {
   bloomComposer.addPass(new RenderPass(scene, camera));
   const bloom = new UnrealBloomPass(
     new THREE.Vector2(1, 1),
-    // Strength bumped up: with DM now on NormalBlending it stays at
-    // moderate brightness, so stars (which still bloom on layer 1) need
-    // enough strength to read clearly as light sources against the
-    // light-violet cloud, not just be a brighter dot among dots.
-    /* strength */ 1.4,
-    /* radius   */ 0.5,
-    // Threshold can be 0 because the bloom pass renders only layer 1
-    // (stars). DM and gas are simply not rendered there.
+    // Strength + radius pushed so stars dominate the visual hierarchy.
+    // The bloom pass renders only layer 1 (stars), so this affects
+    // nothing else — pure star-glow tuning.
+    /* strength */ 1.8,
+    /* radius   */ 0.7,
     /* threshold*/ 0.0,
   );
   bloomComposer.addPass(bloom);
