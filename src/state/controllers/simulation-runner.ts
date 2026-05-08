@@ -17,6 +17,10 @@ import {
   cubicSplineKernel,
   type DensityKernel,
   energyReport,
+  findHalos,
+  type Halo,
+  type IgnitionParams,
+  igniteEligibleHalos,
   type LeapfrogState,
   leapfrogStep,
   momentumReport,
@@ -31,6 +35,7 @@ import {
   type SpatialGrid,
   type SphKernel,
   sphericalPerturbation,
+  type Star,
   tOfA,
   zOfA,
 } from '@physics/index';
@@ -76,6 +81,22 @@ export interface SimulationConfig {
   readonly gasInitialEnergy: number;
   /** SPH smoothing length h. Kernel support is 2h. */
   readonly gasSmoothingLength: number;
+  /** Stage 4: how often (in physics steps) to rebuild the halo catalogue. */
+  readonly haloFinderEveryKSteps: number;
+  /** FoF linking length as a fraction of the mean inter-particle separation (b = 0.2 standard). */
+  readonly haloLinkingFraction: number;
+  /** Halos with fewer particles than this are noise and discarded. */
+  readonly haloMinMembers: number;
+  /**
+   * Code-unit-mass-per-M☉ conversion. Used by the Kulkarni+2021 critical-mass
+   * formula to get a code-unit threshold. Tuned so a halo of ~ 17 particles
+   * crosses M_crit at z = 20 in our default 1024-particle box.
+   */
+  readonly unitMassPerMsun: number;
+  /** Lyman-Werner background, 10⁻²¹ erg/s/cm²/Hz/sr. Default 0 (no LW). */
+  readonly ignitionJ_LW: number;
+  /** Streaming velocity v_bc in km/s. Default 0. */
+  readonly ignitionVbc: number;
 }
 
 export const DEFAULT_CONFIG: SimulationConfig = {
@@ -102,6 +123,12 @@ export const DEFAULT_CONFIG: SimulationConfig = {
   gasCount: 0,
   gasInitialEnergy: 1e-3,
   gasSmoothingLength: 0.06,
+  haloFinderEveryKSteps: 50,
+  haloLinkingFraction: 0.2,
+  haloMinMembers: 8,
+  unitMassPerMsun: 1e-8,
+  ignitionJ_LW: 0,
+  ignitionVbc: 0,
 };
 
 export interface SimulationSnapshot {
@@ -127,6 +154,14 @@ export interface SimulationSnapshot {
   readonly gasMassFraction: number;
   readonly gasMeanInternalEnergy: number;
   readonly gasMaxInternalEnergy: number;
+  /** Stage 4: number of halos found at the most recent halo-finder pass. */
+  readonly haloCount: number;
+  /** Largest halo mass in code units, or 0 if no halos. */
+  readonly largestHaloMass: number;
+  /** Number of stars currently lit (cumulative). */
+  readonly starCount: number;
+  /** First-ignition event: { z, mass } in M☉, or null if nothing has lit yet. */
+  readonly firstIgnition: { redshift: number; haloMassMsun: number } | null;
 }
 
 export interface SimulationRunner {
@@ -137,6 +172,8 @@ export interface SimulationRunner {
   getGasInternalEnergy(): Float32Array;
   /** SPH density per gas particle; length = gasCount. */
   getGasDensities(): Float32Array;
+  /** Stars (read-only). Each star is a code-unit position + mass + birth redshift. */
+  getStars(): readonly Star[];
   /** Recompute per-particle density from current positions. Cheap (uses spatial grid). */
   refreshDensities(): void;
   step(): void;
@@ -235,6 +272,85 @@ export function createSimulationRunner(
 
   let maxParticleDensity = 0;
 
+  // Stage 4: halo finder + star ignition.
+  // We allocate the halo grid once, sized to the periodic box, with cellSize
+  // = the linking length so the 27-cell stencil captures all neighbours.
+  const meanSeparation =
+    config.cosmologicalMode && config.count > 0
+      ? Math.cbrt((2 * config.boxHalfExtent) ** 3 / config.count)
+      : 0.1;
+  const haloLinkingLength = config.haloLinkingFraction * meanSeparation;
+  const haloPeriodicSize = config.cosmologicalMode ? 2 * config.boxHalfExtent : 0;
+  // CellSize must be ≥ linkingLength; cellsPerSide × cellSize must equal box size.
+  const haloCellSize = Math.max(haloLinkingLength, 1e-3);
+  const haloCellsPerSide =
+    haloPeriodicSize > 0
+      ? Math.max(4, Math.floor(haloPeriodicSize / haloCellSize))
+      : Math.max(8, Math.ceil(4 / haloCellSize));
+  const haloGrid: SpatialGrid = createSpatialGrid(system, {
+    cellSize: haloPeriodicSize > 0 ? haloPeriodicSize / haloCellsPerSide : haloCellSize,
+    cellsPerSide: haloCellsPerSide,
+    origin: haloPeriodicSize > 0 ? -haloPeriodicSize / 2 : -2,
+  });
+  const ignitionParams: IgnitionParams = {
+    J_LW: config.ignitionJ_LW,
+    v_bc: config.ignitionVbc,
+    unitMassPerMsun: config.unitMassPerMsun,
+  };
+  let latestHalos: Halo[] = [];
+  const stars: Star[] = [];
+  let firstIgnition: { redshift: number; haloMassMsun: number } | null = null;
+  let lastHaloFinderStep = -1;
+
+  /** Has the halo at `cx,cy,cz,rVir` already lit a star? Spatial proximity test. */
+  const haloIsAlreadyLit = (h: Halo): boolean => {
+    const r2 = h.rVir * h.rVir;
+    for (const s of stars) {
+      const dx = h.cx - s.x;
+      const dy = h.cy - s.y;
+      const dz = h.cz - s.z;
+      if (dx * dx + dy * dy + dz * dz < r2) return true;
+    }
+    return false;
+  };
+
+  const runHaloFinderAndIgnite = (): void => {
+    if (config.count === 0) return;
+    latestHalos = findHalos(system, haloGrid, {
+      start: 0,
+      count: config.count,
+      linkingLength: haloLinkingLength,
+      periodicBoxSize: haloPeriodicSize,
+      minMembers: config.haloMinMembers,
+      G: config.G,
+    });
+
+    // Filter to halos that haven't already lit (spatial proximity check).
+    const eligible: Halo[] = [];
+    const eligibleIds: number[] = [];
+    for (let i = 0; i < latestHalos.length; i += 1) {
+      const halo = latestHalos[i];
+      if (halo === undefined) continue;
+      if (haloIsAlreadyLit(halo)) continue;
+      eligible.push(halo);
+      eligibleIds.push(i);
+    }
+
+    const aNow = aOfT(myr(ageInMyr), config.cosmology);
+    const zNow = zOfA(aNow);
+    const result = igniteEligibleHalos(eligible, eligibleIds, zNow, new Set(), ignitionParams);
+    for (const star of result.newStars) stars.push(star);
+    if (firstIgnition === null && result.newStars.length > 0) {
+      const first = result.newStars[0];
+      if (first !== undefined) {
+        firstIgnition = {
+          redshift: first.redshift,
+          haloMassMsun: first.hostHaloMass / config.unitMassPerMsun,
+        };
+      }
+    }
+  };
+
   // Cosmic time bookkeeping. The integrator runs in code units (legacy from
   // Stage 1); the cosmological clock advances by `dtMyr` per physics step
   // and is read by the HUD's TimeStrip. Stage 2c2 will unify these by
@@ -271,6 +387,7 @@ export function createSimulationRunner(
     refreshDensities,
     getGasInternalEnergy: () => gasInternalEnergy,
     getGasDensities: () => gasDensities,
+    getStars: () => stars,
     step(): void {
       if (config.cosmologicalMode) {
         const a = aOfT(myr(ageInMyr), config.cosmology);
@@ -283,6 +400,15 @@ export function createSimulationRunner(
         leapfrogStep(state, config.dt);
       }
       ageInMyr += config.dtMyr;
+      // Halo finder + star ignition every K steps. Pre-prime on first step.
+      if (
+        config.cosmologicalMode &&
+        (lastHaloFinderStep === -1 ||
+          state.step - lastHaloFinderStep >= config.haloFinderEveryKSteps)
+      ) {
+        runHaloFinderAndIgnite();
+        lastHaloFinderStep = state.step;
+      }
       // Adiabatic energy update: u → u + dudt · dt. The dudt was filled
       // by the most recent force evaluation inside the leapfrog. Floor at a
       // small positive value so finite-precision drift can't make pressure
@@ -316,6 +442,10 @@ export function createSimulationRunner(
         momentumMagnitude: momentumReport(system).magnitude,
         maxParticleDensity,
         ...gasStats(),
+        haloCount: latestHalos.length,
+        largestHaloMass: latestHalos[0]?.mass ?? 0,
+        starCount: stars.length,
+        firstIgnition,
       };
     },
   };

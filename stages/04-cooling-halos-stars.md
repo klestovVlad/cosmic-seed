@@ -1,6 +1,6 @@
 # Stage 4: Cooling, halos, first stars
 
-**Status:** TODO
+**Status:** IN PROGRESS (4a in flight)
 **Estimated:** 4–5 days
 **Depends on:** Stage 3
 **Spec reference:** Phase 3 (cosmology brief §1.6, §1.7)

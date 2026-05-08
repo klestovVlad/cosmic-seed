@@ -13,6 +13,23 @@ function fmtPercent(n: number, digits = 3): string {
   return `${(n * 100).toFixed(digits)}%`;
 }
 
+function fmtMass(mSun: number): string {
+  if (!Number.isFinite(mSun) || mSun <= 0) return '—';
+  if (mSun < 1e3) return `${mSun.toFixed(0)} M☉`;
+  if (mSun < 1e6) return `${(mSun / 1e3).toFixed(1)} k M☉`;
+  if (mSun < 1e9) return `${(mSun / 1e6).toFixed(1)} M M☉`;
+  return `${(mSun / 1e9).toFixed(2)} G M☉`;
+}
+
+function massAnchor(mSun: number): string {
+  if (mSun < 1e5) return 'pre-galactic seed';
+  if (mSun < 1e6) return '≈ globular-cluster mass';
+  if (mSun < 1e7) return '≈ dwarf-galaxy seed';
+  if (mSun < 1e9) return '≈ early dwarf galaxy';
+  if (mSun < 1e11) return '≈ Milky-Way progenitor';
+  return '≈ massive galaxy halo';
+}
+
 export function Hud(): React.JSX.Element {
   const { particleCount, isRunning, stepsPerFrame, diagnostics: d } = useSimulationStore();
 
@@ -47,8 +64,16 @@ export function Hud(): React.JSX.Element {
 
       <div className="grow" />
 
+      {/* First-ignition banner — appears the moment the first halo crosses M_crit. */}
+      {d.firstIgnition !== null && (
+        <div className="pointer-events-auto mx-auto mb-3 max-w-md rounded-md border border-amber-300/30 bg-amber-300/10 px-4 py-2 text-center font-mono text-[11px] text-amber-100 backdrop-blur-sm">
+          <span className="text-amber-300">first star ignited</span> · z ={' '}
+          {d.firstIgnition.redshift.toFixed(1)} · M_halo = {fmtMass(d.firstIgnition.haloMassMsun)}
+        </div>
+      )}
+
       {/* Bottom: stats panel */}
-      <div className="pointer-events-auto grid grid-cols-1 gap-3 sm:grid-cols-4">
+      <div className="pointer-events-auto grid grid-cols-1 gap-3 sm:grid-cols-5">
         <section className="rounded-md border border-white/10 bg-black/40 p-3 backdrop-blur-sm">
           <h2 className="mb-2 font-mono text-[10px] tracking-[0.3em] text-(--color-ink-3) uppercase">
             simulation
@@ -124,6 +149,43 @@ export function Hud(): React.JSX.Element {
                   : '—'
               }
               hint="Compression-heating amplification factor."
+            />
+          </div>
+        </section>
+
+        <section className="rounded-md border border-white/10 bg-black/40 p-3 backdrop-blur-sm">
+          <h2 className="mb-2 font-mono text-[10px] tracking-[0.3em] text-(--color-ink-3) uppercase">
+            halos & stars
+          </h2>
+          <div className="space-y-1">
+            <Stat
+              label="halos"
+              value={d.haloCount.toString()}
+              hint="FoF clusters above minMembers"
+            />
+            <Stat
+              label="largest M"
+              value={d.largestHaloMass > 0 ? fmt(d.largestHaloMass, 4) : '—'}
+              hint="Most massive halo (code units)"
+            />
+            <Stat
+              label="stars"
+              value={d.starCount.toString()}
+              hint="Halos that have crossed M_crit and ignited Pop III"
+            />
+            <Stat
+              label="first z"
+              value={d.firstIgnition !== null ? d.firstIgnition.redshift.toFixed(1) : '—'}
+              hint="Redshift of the first ignition event"
+            />
+            <Stat
+              label="first M"
+              value={d.firstIgnition !== null ? fmtMass(d.firstIgnition.haloMassMsun) : '—'}
+              hint={
+                d.firstIgnition !== null
+                  ? massAnchor(d.firstIgnition.haloMassMsun)
+                  : 'Halo mass at first ignition'
+              }
             />
           </div>
         </section>

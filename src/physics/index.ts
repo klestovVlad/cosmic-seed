@@ -58,6 +58,17 @@ export { type ZeldovichOutput, type ZeldovichParams, zeldovichField } from './ze
 export { cubicSplineKernel, type SphKernel } from './sph-kernels';
 export { computeSphDensity, computeSphDensityForRange } from './sph-density';
 export { computeSphForcesAndEnergy, type SphForceOptions, type SphForceOutputs } from './sph-force';
+export { findHalos, type FoFOptions, type Halo } from './halo-finder';
+export {
+  criticalHaloMass,
+  evaluateIgnition,
+  igniteEligibleHalos,
+  type IgnitionDecision,
+  type IgnitionParams,
+  type IgnitionResult,
+  POPIII_EFFICIENCY,
+  type Star,
+} from './star-ignition';
 export { createRandom, type Random } from './random';
 export {
   centerOfMass,

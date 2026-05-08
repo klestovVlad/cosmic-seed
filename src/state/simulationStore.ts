@@ -25,6 +25,11 @@ export interface SimulationDiagnostics {
   readonly gasMassFraction: number;
   readonly gasMeanInternalEnergy: number;
   readonly gasMaxInternalEnergy: number;
+  /** Stage 4: halo + star diagnostics. */
+  readonly haloCount: number;
+  readonly largestHaloMass: number;
+  readonly starCount: number;
+  readonly firstIgnition: { redshift: number; haloMassMsun: number } | null;
 }
 
 export interface DensitySample {
@@ -70,6 +75,10 @@ const emptyDiagnostics: SimulationDiagnostics = {
   gasMassFraction: 0,
   gasMeanInternalEnergy: 0,
   gasMaxInternalEnergy: 0,
+  haloCount: 0,
+  largestHaloMass: 0,
+  starCount: 0,
+  firstIgnition: null,
 };
 
 const MAX_DENSITY_SAMPLES = 512;

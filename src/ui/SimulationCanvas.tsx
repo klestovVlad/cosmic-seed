@@ -3,6 +3,7 @@ import { createScene } from '@rendering/scene';
 import { createBoxFrame } from '@rendering/box-frame';
 import { createGasCloud, type GasCloud } from '@rendering/gas-cloud';
 import { createParticleCloud, type ParticleCloud } from '@rendering/particle-cloud';
+import { createStarCloud, type StarCloud } from '@rendering/star-cloud';
 import { createLoop } from '@rendering/loop';
 import { initWebGpu } from '@rendering/gpu/device';
 import { useSimulationStore } from '@state/simulationStore';
@@ -192,6 +193,12 @@ export function SimulationCanvas(): React.JSX.Element {
       const gasCloud: GasCloud | null =
         runner.gasCount > 0 ? createGasCloud(runner.gasCount, window.devicePixelRatio) : null;
       if (gasCloud !== null) scene.scene.add(gasCloud.object);
+      // Stage 4: star cloud sized for far more capacity than we'll use; ignited
+      // halos appear as bright white points at their centres.
+      const starCloud: StarCloud | null = config.cosmologicalMode
+        ? createStarCloud(256, window.devicePixelRatio)
+        : null;
+      if (starCloud !== null) scene.scene.add(starCloud.object);
       const boxFrame = config.cosmologicalMode ? createBoxFrame(config.boxHalfExtent) : null;
       if (boxFrame !== null) scene.scene.add(boxFrame.object);
 
@@ -240,6 +247,9 @@ export function SimulationCanvas(): React.JSX.Element {
                 lastTempRange = { min, max: maxT };
               }
             }
+            if (starCloud !== null) {
+              starCloud.syncStars(frame.stars);
+            }
           },
           async onFrame(): Promise<void> {
             frames += 1;
@@ -282,6 +292,7 @@ export function SimulationCanvas(): React.JSX.Element {
         scene.resize(w, h, dpr);
         dmCloud.resize(dpr);
         gasCloud?.resize(dpr);
+        starCloud?.resize(dpr);
       };
 
       handleResize();
@@ -294,6 +305,7 @@ export function SimulationCanvas(): React.JSX.Element {
         window.removeEventListener('resize', handleResize);
         dmCloud.dispose();
         gasCloud?.dispose();
+        starCloud?.dispose();
         boxFrame?.dispose();
         scene.dispose();
         runner.destroy();

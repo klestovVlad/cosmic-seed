@@ -44,6 +44,8 @@ export interface FrameData {
   readonly gasInternalEnergy: Float32Array;
   /** SPH density per gas particle, length = gasCount. */
   readonly gasDensities: Float32Array;
+  /** Stage 4: stars currently lit. Read-only — runner appends as halos cross M_crit. */
+  readonly stars: readonly { x: number; y: number; z: number; mass: number }[];
 }
 
 export interface FrameRunner {
@@ -92,6 +94,7 @@ export function createCpuFrameRunner(
         maxDensity: maxRho,
         gasInternalEnergy: inner.getGasInternalEnergy(),
         gasDensities: inner.getGasDensities(),
+        stars: inner.getStars(),
       });
     },
     snapshot(): SimulationSnapshot {
@@ -180,6 +183,10 @@ export function createGpuFrameRunner(
     gasMassFraction: 0,
     gasMeanInternalEnergy: 0,
     gasMaxInternalEnergy: 0,
+    haloCount: 0,
+    largestHaloMass: 0,
+    starCount: 0,
+    firstIgnition: null,
   };
 
   // GPU mode doesn't run gas SPH yet (Stage 3c will add WGSL SPH kernels).
@@ -221,6 +228,7 @@ export function createGpuFrameRunner(
         maxDensity: maxParticleDensity,
         gasInternalEnergy: emptyF32,
         gasDensities: emptyF32,
+        stars: [],
       };
     },
 
@@ -251,6 +259,10 @@ export function createGpuFrameRunner(
         gasMassFraction: 0,
         gasMeanInternalEnergy: 0,
         gasMaxInternalEnergy: 0,
+        haloCount: 0,
+        largestHaloMass: 0,
+        starCount: 0,
+        firstIgnition: null,
       };
     },
 
