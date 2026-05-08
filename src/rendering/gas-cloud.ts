@@ -11,9 +11,12 @@ const VERT_SHADER = /* glsl */ `
   uniform float uPointSize;
   uniform float uPixelRatio;
   uniform float uMaxScreenSize;
+  uniform float uFadeStart;
+  uniform float uFadeEnd;
   uniform float uTempMin;
   uniform float uTempMax;
   varying float vTempNorm;
+  varying float vFade;
 
   void main() {
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
@@ -25,15 +28,17 @@ const VERT_SHADER = /* glsl */ `
     float hi = log(max(uTempMax, uTempMin * 1.000001));
     float v = (log(max(aTemp, 1e-9)) - lo) / max(hi - lo, 1e-6);
     vTempNorm = clamp(v, 0.0, 1.0);
+
+    float dist = length(position);
+    vFade = 1.0 - smoothstep(uFadeStart, uFadeEnd, dist);
   }
 `;
 
 const FRAG_SHADER = /* glsl */ `
   varying float vTempNorm;
+  varying float vFade;
   uniform float uOpacity;
 
-  // Cold → warm ramp the user expects from a hydro visualisation:
-  //   blue (cold gas)   →   cyan   →   orange   →   white-hot (shock).
   vec3 ramp(float t) {
     if (t < 0.33) return mix(vec3(0.15, 0.4, 0.9), vec3(0.05, 0.85, 0.95), t / 0.33);
     if (t < 0.66) return mix(vec3(0.05, 0.85, 0.95), vec3(0.95, 0.55, 0.05), (t - 0.33) / 0.33);
@@ -44,8 +49,8 @@ const FRAG_SHADER = /* glsl */ `
     vec2 d = gl_PointCoord - vec2(0.5);
     float r2 = dot(d, d);
     if (r2 > 0.22) discard;
-    // Sharper edge so gas reads as discrete particles, not soft bokeh.
-    float alpha = uOpacity * smoothstep(0.22, 0.16, r2);
+    if (vFade <= 0.0) discard;
+    float alpha = uOpacity * smoothstep(0.22, 0.16, r2) * vFade;
     gl_FragColor = vec4(ramp(vTempNorm), alpha);
   }
 `;
@@ -79,9 +84,11 @@ export function createGasCloud(gasCount: number, dpr: number): GasCloud {
     vertexShader: VERT_SHADER,
     fragmentShader: FRAG_SHADER,
     uniforms: {
-      uPointSize: { value: 22.0 },
-      uMaxScreenSize: { value: 13.0 },
+      uPointSize: { value: 11.0 },
+      uMaxScreenSize: { value: 7.0 },
       uPixelRatio: { value: Math.min(dpr, 2) },
+      uFadeStart: { value: 0.4 },
+      uFadeEnd: { value: 0.55 },
       uTempMin: { value: 1e-3 },
       uTempMax: { value: 1.0 },
       uOpacity: { value: 0.92 },

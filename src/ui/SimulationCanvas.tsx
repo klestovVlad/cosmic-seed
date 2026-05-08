@@ -47,15 +47,13 @@ const GPU_CONFIG: SimulationConfig = {
   softening: 0.018,
   densityKernelRadius: 0.06,
   dt: 1.2e-3,
-  // 0.04 Myr/step × 60 fps = ~ 2.4 Myr / real-second. Halved from the
-  // previous 0.08 to push per-frame particle motion below ~ 1 px on a
-  // 1080p viewport — sub-pixel motion looks visually static, killing
-  // the "everything мельтешит" perception. The educationally-
-  // interesting window (z = 50 → first ignition near z = 18, ~ 200 Myr
-  // of cosmic time) now plays out over ~ 80 s of viewing — slower, but
-  // calm enough to let a viewer track structure formation as a process
-  // rather than a blur. Stage 5d's speed slider exposes this.
-  dtMyr: 0.04,
+  // 0.02 Myr/step × 60 fps ≈ 1.2 Myr / real-second. Halved again to
+  // push per-frame particle displacement well into sub-pixel territory.
+  // The full z = 50 → 15 viewing window now takes ~ 3 minutes —
+  // calm enough that the eye can follow a single halo's trajectory
+  // rather than seeing blurred motion. Stage 5d's speed slider lets
+  // viewers fast-forward.
+  dtMyr: 0.02,
   zInit: redshift(50),
   // EXPERIENCE.md §3 / §5 frame "first star ignited" as a *singular*
   // educational milestone — a rare beat, not a fireworks display. With
@@ -89,12 +87,14 @@ const CPU_CONFIG: SimulationConfig = {
   gasSmoothingLength: 0.18,
 };
 
-// σ_8 = 0.35 (vs Planck's 0.81): we deliberately under-amplify the IC
-// fluctuations so the field stays in a distributed cosmic-web regime
-// instead of collapsing into a single dominant halo within the first
-// 200 Myr. The educational beat is "see structure form across the box",
-// not "watch one mega-cluster eat the whole simulation".
-const TAMED_PS = { ...PLANCK_2018_PS, sigma8: 0.35 };
+// σ_8 = 0.22 (vs Planck's 0.81): we deliberately under-amplify the IC
+// fluctuations so structure has to *grow* during the viewing window
+// rather than already being mostly collapsed at z = 50. Lower σ_8
+// means a more uniform-looking IC that gradually develops dense knots
+// — the educational beat is "watch the cosmic web form", and that
+// requires the field to actually evolve over viewable time, not be a
+// near-static collapsed blob from the first frame.
+const TAMED_PS = { ...PLANCK_2018_PS, sigma8: 0.22 };
 
 // Seed search: with σ_8 = 0.35 on a 16³ grid only a handful of the
 // longest-wavelength modes carry visible amplitude, so the seed
@@ -261,7 +261,12 @@ export function SimulationCanvas(): React.JSX.Element {
       const boxSize = 2 * config.boxHalfExtent;
       const halfBox = config.boxHalfExtent;
       const unwrapTarget = { x: 0, y: 0, z: 0 };
-      const TARGET_LERP = 0.04; // ~ 0.5 s time-constant at 60 fps
+      // Very slow lerp: ~ 5 s time-constant at 60 fps. The earlier 0.04
+      // factor caused a visible global "slide" of every particle each
+      // frame as the target chased a wandering halo COM — what the user
+      // perceived as "скорости огромные". At 0.005 the target update is
+      // sub-pixel between frames; particles look stationary.
+      const TARGET_LERP = 0.005;
       const unwrappedDmPositions = new Float32Array(runner.dmCount * 4);
       const unwrappedGasPositions = new Float32Array(runner.gasCount * 4);
 

@@ -7,22 +7,29 @@ const VERT_SHADER = /* glsl */ `
   uniform float uMaxScreenSize;
   uniform float uDensityMin;
   uniform float uDensityMax;
+  uniform float uFadeStart;
+  uniform float uFadeEnd;
   varying float vDensityNorm;
+  varying float vFade;
 
   void main() {
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
     gl_Position = projectionMatrix * mvPosition;
-    // Perspective scaling × DPR, but clamped at a hard upper bound. Without
-    // the clamp, particles near the camera blow up to 100s of pixels and
-    // read as out-of-focus bokeh blobs instead of discrete particles.
     float perspective = uPointSize * uPixelRatio * (1.0 / -mvPosition.z);
     gl_PointSize = min(perspective, uMaxScreenSize * uPixelRatio);
 
-    // Log scaling makes the central peak readable without crushing the wings.
     float lo = log(max(uDensityMin, 1e-6));
     float hi = log(max(uDensityMax, uDensityMin * 1.000001));
     float v = (log(max(aDensity, 1e-6)) - lo) / max(hi - lo, 1e-6);
     vDensityNorm = clamp(v, 0.0, 1.0);
+
+    // Distance-based fade from the unwrap origin (scene origin, since the
+    // renderer pre-translates particles around it). Past uFadeStart the
+    // alpha tapers; past uFadeEnd it's zero. Kills the hard "edge of the
+    // periodic-image cluster" the user saw — cosmic web ends in soft
+    // darkness, not a perceptible boundary.
+    float dist = length(position);
+    vFade = 1.0 - smoothstep(uFadeStart, uFadeEnd, dist);
   }
 `;
 
@@ -32,6 +39,7 @@ const FRAG_SHADER = /* glsl */ `
   uniform vec3 uColorHi;
   uniform float uOpacity;
   varying float vDensityNorm;
+  varying float vFade;
 
   vec3 ramp(float t) {
     if (t < 0.5) return mix(uColorLo, uColorMid, t * 2.0);
@@ -42,10 +50,8 @@ const FRAG_SHADER = /* glsl */ `
     vec2 d = gl_PointCoord - vec2(0.5);
     float r2 = dot(d, d);
     if (r2 > 0.22) discard;
-    // Sharper edge than the previous smoothstep(0.25, 0.05) bokeh: most
-    // of the sprite is opaque, with a tight 1-pixel-or-so anti-alias
-    // ring at the boundary. Reads as discrete particles, not blurry orbs.
-    float alpha = uOpacity * smoothstep(0.22, 0.16, r2);
+    if (vFade <= 0.0) discard;
+    float alpha = uOpacity * smoothstep(0.22, 0.16, r2) * vFade;
     vec3 color = ramp(vDensityNorm);
     color += vec3(0.15) * pow(vDensityNorm, 4.0);
     gl_FragColor = vec4(color, alpha);
@@ -81,18 +87,24 @@ export function createParticleCloud(count: number, dpr: number): ParticleCloud {
     vertexShader: VERT_SHADER,
     fragmentShader: FRAG_SHADER,
     uniforms: {
-      uPointSize: { value: 24.0 },
-      uMaxScreenSize: { value: 14.0 },
+      // Tiny sprites: max 7 px on retina (× 2 = 14 px screen). Small
+      // enough that the cosmic-web sampling reads as a particle field,
+      // not a sea of overlapping discs.
+      uPointSize: { value: 11.0 },
+      uMaxScreenSize: { value: 7.0 },
       uPixelRatio: { value: Math.min(dpr, 2) },
       uColorLo: { value: new THREE.Color('#2a1b3d') },
       uColorMid: { value: new THREE.Color('#7a5cb8') },
       uColorHi: { value: new THREE.Color('#cdb8ff') },
       uDensityMin: { value: 1e-3 },
       uDensityMax: { value: 1.0 },
-      // High opacity now — the previous low alpha was compensating for
-      // additive stacking. With NormalBlending each pixel shows the
-      // front-most particle, no inter-frame additive drift, no shimmer.
       uOpacity: { value: 0.92 },
+      // Distance fade — particles past uFadeStart taper to nothing by
+      // uFadeEnd. With box half-extent 0.5 and unwrap at scene origin,
+      // 0.4 → 0.55 gives a soft halo of the cluster fading to dark
+      // space. No visible boundary.
+      uFadeStart: { value: 0.4 },
+      uFadeEnd: { value: 0.55 },
     },
     transparent: true,
     depthWrite: false,
