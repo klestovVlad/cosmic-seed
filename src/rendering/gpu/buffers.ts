@@ -11,8 +11,15 @@ export interface ParticleGpuBuffers {
   readonly accelerations: GPUBuffer;
   /** count × f32. */
   readonly masses: GPUBuffer;
-  /** Mappable copy of `positions` for read-back to CPU each frame. */
-  readonly positionsStaging: GPUBuffer;
+  /**
+   * Two staging buffers in a ring so position readback can be pipelined:
+   * frame N copies into one slot while frame N-1's copy is being mapped from
+   * the other. This is the difference between waiting for a fence every
+   * frame (~30 fps even on a fast GPU) and just consuming fence-completed
+   * data (60 fps locked).
+   */
+  readonly positionsStagingA: GPUBuffer;
+  readonly positionsStagingB: GPUBuffer;
   /** Mappable copy of `velocities` for HUD readback (lower cadence). */
   readonly velocitiesStaging: GPUBuffer;
   destroy(): void;
@@ -49,8 +56,13 @@ export function createParticleGpuBuffers(
     size: massBytes,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
   });
-  const positionsStaging = device.createBuffer({
-    label: 'positionsStaging',
+  const positionsStagingA = device.createBuffer({
+    label: 'positionsStagingA',
+    size: vec4Bytes,
+    usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+  });
+  const positionsStagingB = device.createBuffer({
+    label: 'positionsStagingB',
     size: vec4Bytes,
     usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
   });
@@ -73,14 +85,16 @@ export function createParticleGpuBuffers(
     velocities,
     accelerations,
     masses,
-    positionsStaging,
+    positionsStagingA,
+    positionsStagingB,
     velocitiesStaging,
     destroy(): void {
       positions.destroy();
       velocities.destroy();
       accelerations.destroy();
       masses.destroy();
-      positionsStaging.destroy();
+      positionsStagingA.destroy();
+      positionsStagingB.destroy();
       velocitiesStaging.destroy();
     },
   };
