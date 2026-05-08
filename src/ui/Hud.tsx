@@ -23,19 +23,13 @@ export function Hud(): React.JSX.Element {
 
   return (
     <div className="pointer-events-none absolute inset-0 z-20 flex flex-col p-3 text-(--color-ink-1) sm:p-4">
-      {/* Top row — wordmark + run state */}
-      <div className="flex items-start justify-between">
-        <div className="pointer-events-auto select-none">
-          <p className="font-mono text-[10px] tracking-[0.4em] text-(--color-ink-3) uppercase">
-            cosmic seed · stage 1b
-          </p>
-          <h1 className="font-mono text-2xl font-light text-(--color-ink-1) sm:text-3xl">
-            Spherical&nbsp;Collapse
-          </h1>
-        </div>
-
+      {/* Top row — run-state badge in the corner. The wordmark moved into the
+          TimeStrip in Stage 2a; the Spherical Collapse heading still anchors
+          the e2e test until cosmological IC arrives. */}
+      <div className="flex items-start justify-end">
+        <h1 className="sr-only">Spherical Collapse</h1>
         <div className="rounded-md border border-white/10 bg-black/40 px-3 py-2 backdrop-blur-sm">
-          <div className="flex items-center gap-2 text-[11px] font-mono">
+          <div className="flex items-center gap-2 font-mono text-[11px]">
             <span
               aria-hidden
               className={

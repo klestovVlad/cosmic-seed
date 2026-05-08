@@ -1,6 +1,7 @@
 // Public API of the physics layer. Other modules import from this barrel only.
 
 export {
+  aOfZ,
   type CodeDensity,
   type CodeEnergy,
   type CodeLength,
@@ -14,8 +15,34 @@ export {
   codeMass,
   codeTime,
   codeVelocity,
+  type HubbleRate,
+  hubbleRate,
+  MLY_PER_MPC,
+  type Mpc,
+  mpc,
+  type Msun,
+  msun,
+  type Myr,
+  myr,
+  type Redshift,
+  redshift,
+  type ScaleFactor,
+  scaleFactor,
+  zOfA,
 } from './units';
 export { GRAVITATIONAL_CONSTANT } from './constants';
+export {
+  type CosmologyParams,
+  growthFactor,
+  growthRate,
+  h0InvMyr,
+  hubbleAt,
+  hubbleAtRedshift,
+  PLANCK_2018,
+  speedOfTimeReadout,
+  tOfA,
+  aOfT,
+} from './cosmology';
 export { createRandom, type Random } from './random';
 export {
   centerOfMass,

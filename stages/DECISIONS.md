@@ -15,6 +15,23 @@ Format:
 
 ---
 
+## 2026-05-08 — Stage 2 split into 2a / 2b / 2c
+
+**Status:** accepted
+**Context:** Stage 2 in the brief covers comoving coordinates, Eisenstein–Hu power spectrum, Zeldovich IC with off-thread FFT, adaptive timestep, comoving leapfrog, plus the time strip / scale bar / speed-of-time UI from `EXPERIENCE.md §2`. That's a 3–5 day stage; ship it in three sessions instead of one bloated push.
+**Decision:**
+
+- **2a** (this session): pure cosmology math (`H(z)`, `D(a)`, `aOfT`, `tOfA`, `f`) with branded units (`Mpc`, `Msun`, `Myr`, `Redshift`, `ScaleFactor`) and full unit-test coverage. Plus the on-screen **time strip** (z + Myr + progress) and **scale bar** (Mpc + Mly), reading from the cosmology module. Simulation physics stays in code units — the UI is the cosmological wrapper, not yet the physics. This is acceptable because Stage 1's spherical-collapse demo doesn't need cosmology to run; the time/scale UI is real for whatever Stage 2b will produce.
+- **2b**: Eisenstein–Hu fit, in-house Cooley–Tukey FFT in a Web Worker, Zeldovich displacement field replacing `sphericalPerturbation` as the IC.
+- **2c**: comoving leapfrog (`dx/dt = v/a²`, `dv/dt = −∇Φ/a`, mean-density subtraction), adaptive timestep based on local dynamical time + Hubble rate, δ_max(t) chart with linear-theory reference, linear-growth regression test.
+
+**Alternatives considered:**
+
+- _Land 2 in one push._ Rejected — the same risk pattern as 1b/1c, and the FFT + worker layer is sensitive code that needs its own attention.
+- _Do UI last._ Rejected — `EXPERIENCE.md §15` puts time strip + scale bar in Stage 2; shipping them with the cosmology math means subsequent stages always render against meaningful axes.
+
+**Consequences:** the user sees cosmological time/scale on screen after 2a even though the simulation isn't cosmological yet. Honest "live now in v0 / cosmological IC arrives in 2b" framing in the time strip's tooltip; promotes to the real value once 2b lands.
+
 ## 2026-05-08 — Educational clarity is acceptance, not polish
 
 **Status:** accepted

@@ -6,7 +6,7 @@ export function CompatibilityBanner(): React.JSX.Element | null {
   if (gpuStatus.kind !== 'unsupported') return null;
 
   return (
-    <div className="pointer-events-auto absolute top-3 left-1/2 z-30 max-w-md -translate-x-1/2 rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-2 backdrop-blur-sm">
+    <div className="pointer-events-auto absolute bottom-3 left-1/2 z-30 max-w-md -translate-x-1/2 rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-2 backdrop-blur-sm">
       <p className="font-mono text-[11px] text-amber-100">
         <span className="text-amber-300">heads-up</span> · running on the CPU fallback. With WebGPU
         this jumps from <span className="text-amber-300">1.5k</span> to{' '}

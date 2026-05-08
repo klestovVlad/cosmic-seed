@@ -1,6 +1,6 @@
 # Stage 2: Cosmology + initial conditions
 
-**Status:** TODO
+**Status:** IN PROGRESS (2a in flight)
 **Estimated:** 3–5 days
 **Depends on:** Stage 1
 **Spec reference:** Phase 1 (cosmology brief §5)
@@ -71,4 +71,51 @@ Make the simulation truly cosmological: comoving coordinates, a Friedmann backgr
 
 ## Notes / learnings
 
-_(filled during work)_
+**2026-05-08 — Stage 2a landed.**
+
+Pure cosmology math + the on-screen chrome from `EXPERIENCE.md §2`. Simulation physics is still in code units — that lands in 2b (Zeldovich IC) and 2c (comoving leapfrog).
+
+Implemented:
+
+- `src/physics/units.ts` extended with cosmological brands: `Mpc`, `Msun`, `Myr`, `Redshift`, `ScaleFactor`, `HubbleRate`. Plus `aOfZ` / `zOfA` relation, `MLY_PER_MPC = 3.2615` for the scale-bar conversion.
+- `src/physics/cosmology.ts` — flat ΛCDM background.
+  - `hubbleAt(a, p)` and `hubbleAtRedshift(z, p)` — `H(z) = H₀ · √(Ω_m (1+z)³ + Ω_Λ)`. Stored in 1/Myr (so `dt[Myr] · H` is dimensionless).
+  - `tOfA(a, p)` — cosmic time by trapezoidal quadrature of `da' / [a'·H(a')]`.
+  - `aOfT(t, p)` — bisection inverse.
+  - `growthFactor(a, p)` — Carroll, Press, Turner 1992 fit; ~ 1 % accurate over the relevant range. We skipped the RK4 ODE — overkill for a smooth scalar called at HUD cadence.
+  - `growthRate(a, p)` — Linder 2005 `f ≈ Ω_m(a)^0.55`.
+  - `speedOfTimeReadout(myrPerSecond)` formats kyr / Myr / Gyr per real-second.
+  - `PLANCK_2018` baseline: H₀ = 67.4 km/s/Mpc, Ω*m = 0.315, Ω*Λ = 0.685.
+- `src/ui/TimeStrip.tsx` — top-of-viewport strip: cosmic-seed wordmark, `redshift z`, `age of universe t [Myr/kyr/Gyr]`, `1 s sim ≈ N Myr` readout, gradient progress bar from z = 100 → z = 6 with the corresponding (t_init, t_end) in Myr underneath. Wall-clock-driven cursor for now (Stage 2b will switch it to read the runner's actual t/a).
+- `src/ui/ScaleBar.tsx` — top-left widget: `1.00 Mpc · 3.26 Mly` and a 100-pixel scale tick. NASA-viz style.
+- Both UI elements honour the Expert / Explained label toggle (the toggle itself ships in Stage 5; `expertMode` slot added to `uiStore` here).
+- `Hud.tsx` lost the duplicate `cosmic seed · stage 1b` wordmark + `Spherical Collapse` heading — TimeStrip carries the wordmark now. The `Spherical Collapse` heading kept as `sr-only` so the Playwright `loads.spec.ts` keeps passing.
+
+Tests added (18 cosmology cases):
+
+- redshift / scale-factor round-trips (`a ↔ z`).
+- Hubble rate: H(z = 0) = H₀, monotone with z, matter-dominated limit at z = 100.
+- cosmic time: t(a → 0) → 0, age today ≈ 13.8 Gyr (within Planck 2018 bounds), `aOfT` inverts `tOfA`.
+- growth factor: D(1) = 1 by normalisation; D(a) ≈ a deep in matter era; monotone.
+- growth rate: f ≈ Ω_m(a)^0.55 ≈ 0.524 today.
+- `speedOfTimeReadout` formatting (kyr / Myr / Gyr).
+- Hubble-rate sanity at default cosmology (~ 6.9e-5 / Myr).
+
+Test totals: 37 unit tests across 8 files. Build: 762 KB / 204 KB gzipped. All gates green.
+
+Visual checkpoint refreshed at `docs/checkpoints/stage-01.png` (still under stage-01 since the scene is the Stage 1 spherical collapse, just with the Stage 2a wrapper). Time-strip cursor visibly advances from z = 100 (early) toward z = 6 over ~ 2 minutes; scale bar reads `1.00 Mpc · 3.26 Mly`.
+
+Carrying into 2b:
+
+- Eisenstein–Hu power spectrum + σ_8 normalisation check (Eisenstein & Hu 1998).
+- In-house Cooley–Tukey FFT in a Web Worker (`src/workers/ic-worker.ts`).
+- Zeldovich displacement field: sample `δ(k) ∝ √P(k)`, compute `ψ(k) = −i k δ(k) / k²`, IFFT to real space, place particles at `q + D(z_init) · ψ(q)` with velocities `D · f · H · ψ`.
+- Replace `sphericalPerturbation` as the default IC.
+
+Carrying into 2c:
+
+- Comoving leapfrog: `dx/dt = v / a²`, `dv/dt = −∇Φ / a`, with mean-density subtraction.
+- Adaptive timestep (CFL-like criterion).
+- HUD reads runner's true (t, a) instead of the wall-clock cursor.
+- δ_max(t) chart with linear-theory reference line.
+- Linear-growth regression test.
