@@ -111,8 +111,8 @@ export function createGpuFrameRunner(ctx: GpuContext, config: SimulationConfig):
   let frameCounter = 0;
   // Recompute density on the readback every Nth frame; the eye doesn't see
   // the difference but the CPU spatial-grid rebuild is the largest non-GPU
-  // cost at 10k particles.
-  const DENSITY_REFRESH_EVERY = 6;
+  // cost. At 60 fps target this is ~ 5 Hz, plenty for the colour-mapping window.
+  const DENSITY_REFRESH_EVERY = 12;
 
   // Energy computation in GPU mode is sampled (full O(N²) potential is too
   // expensive at 10k for a live readout). Stage 1c ships kinetic + momentum

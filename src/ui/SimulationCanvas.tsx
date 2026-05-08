@@ -15,14 +15,20 @@ import { DEFAULT_CONFIG, type SimulationConfig } from '@state/controllers/simula
 const HUD_REFRESH_HZ = 10;
 const HUD_REFRESH_INTERVAL_MS = 1000 / HUD_REFRESH_HZ;
 
+// Default GPU count: deliberately conservative. Direct N² + WebGPU compute
+// has to share GPU time with Three.js WebGL render — every context switch
+// costs, and a heavy compute kernel can starve the browser compositor (the
+// thing that puts our pixels on the screen). The user reports HUD showing
+// 20 fps but the screen feeling like 1–2: that's compositor contention,
+// not a wrong counter. Cap at 2.5 k to leave headroom for compositor; we
+// lift this with a Barnes–Hut tree (N log N) and/or WebGPURenderer (shared
+// device) in Stage 7.
 const GPU_CONFIG: SimulationConfig = {
   ...DEFAULT_CONFIG,
-  count: 10000,
-  // Mean inter-particle separation at 10k in a unit sphere ≈ 0.075.
-  // Softening half of that, density kernel ~1.5× so each particle reliably
-  // sees a handful of neighbours.
-  softening: 0.035,
-  densityKernelRadius: 0.11,
+  count: 2500,
+  // Mean inter-particle separation at 2.5 k in a unit sphere ≈ 0.118.
+  softening: 0.06,
+  densityKernelRadius: 0.18,
 };
 
 const CPU_CONFIG: SimulationConfig = DEFAULT_CONFIG;
@@ -105,7 +111,10 @@ export function SimulationCanvas(): React.JSX.Element {
             }
           },
         },
-        useGpu ? 2 : 4,
+        // 1 GPU step per frame — keeps the compute kernel short so the
+        // compositor isn't starved of GPU time. CPU path runs more steps
+        // per frame because each is much shorter at 1.5 k particles.
+        useGpu ? 1 : 4,
       );
 
       const handleResize = (): void => {
