@@ -48,14 +48,15 @@ const GPU_CONFIG: SimulationConfig = {
   softening: 0.018,
   densityKernelRadius: 0.06,
   dt: 1.2e-3,
-  // 0.08 Myr/step × 60 fps = ~ 5 Myr / real-second. The educationally-
+  // 0.04 Myr/step × 60 fps = ~ 2.4 Myr / real-second. Halved from the
+  // previous 0.08 to push per-frame particle motion below ~ 1 px on a
+  // 1080p viewport — sub-pixel motion looks visually static, killing
+  // the "everything мельтешит" perception. The educationally-
   // interesting window (z = 50 → first ignition near z = 18, ~ 200 Myr
-  // of cosmic time) plays out over ~ 30 s of viewing — slow enough that
-  // the time strip's age readout actually ticks where the eye can read it
-  // and a viewer can register first-halo-formation, first-ignition, and
-  // the cooling cascade as discrete beats. Stage 5d's speed slider will
-  // expose this; this is the considered default.
-  dtMyr: 0.08,
+  // of cosmic time) now plays out over ~ 80 s of viewing — slower, but
+  // calm enough to let a viewer track structure formation as a process
+  // rather than a blur. Stage 5d's speed slider exposes this.
+  dtMyr: 0.04,
   zInit: redshift(50),
   // EXPERIENCE.md §3 / §5 frame "first star ignited" as a *singular*
   // educational milestone — a rare beat, not a fireworks display. With
@@ -79,10 +80,8 @@ const CPU_CONFIG: SimulationConfig = {
   softening: 0.05,
   densityKernelRadius: 0.16,
   dt: 1.2e-3,
-  // Same Myr/sec target as GPU mode, accounting for stepsPerFrame = 2
-  // (CPU runs more steps per frame because each step is cheaper at 512
-  // particles). Stage 5d's speed slider will expose this.
-  dtMyr: 0.04,
+  // Same target Myr/sec as GPU mode, accounting for stepsPerFrame = 2.
+  dtMyr: 0.02,
   zInit: redshift(50),
   gasCount: CPU_GRID ** 3,
   // u₀ small but non-zero so initial pressure exists (prevents immediate

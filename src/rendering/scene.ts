@@ -70,13 +70,15 @@ export function createScene(canvas: HTMLCanvasElement): SceneHandle {
 
   const scene = new THREE.Scene();
 
-  const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 1000);
-  // Camera positioned OUTSIDE the periodic box so the whole 1×1×1 volume
-  // reads as a 3D object: cosmic web visible as a structure inside a
-  // wireframe cube, not a soup of giant sprites filling the viewport.
-  // Distance ≈ 2.6 (vs box diagonal ≈ 0.87) — box fills the centre of
-  // the viewport with breathing room around it.
-  camera.position.set(1.4, 0.9, 2.1);
+  // FOV 55° (vs default 45°) widens the angle so the box fills more of
+  // the viewport without pushing the camera so far back that particles
+  // shrink to specks. Combined with a closer camera position this lets
+  // the cube read as a sizeable 3-D object instead of a small artefact.
+  const camera = new THREE.PerspectiveCamera(55, 1, 0.01, 1000);
+  // Camera distance ≈ 1.93 from origin (was 2.6). Box diagonal is 0.87,
+  // so the wireframe still fits with margin, but its on-screen footprint
+  // is about 60 % of the viewport — visibly *the* subject of the frame.
+  camera.position.set(1.0, 0.7, 1.5);
   camera.lookAt(0, 0, 0);
   camera.layers.enableAll();
 
@@ -100,14 +102,14 @@ export function createScene(canvas: HTMLCanvasElement): SceneHandle {
   bloomComposer.addPass(new RenderPass(scene, camera));
   const bloom = new UnrealBloomPass(
     new THREE.Vector2(1, 1),
-    // Strength tuned down: with stars now meant to be 1–3 distinct
-    // events (not a fireworks display), each one should read as a
-    // contained luminous source, not a plate-sized smear.
-    /* strength */ 0.7,
-    /* radius   */ 0.45,
+    // Strength bumped up: with DM now on NormalBlending it stays at
+    // moderate brightness, so stars (which still bloom on layer 1) need
+    // enough strength to read clearly as light sources against the
+    // light-violet cloud, not just be a brighter dot among dots.
+    /* strength */ 1.4,
+    /* radius   */ 0.5,
     // Threshold can be 0 because the bloom pass renders only layer 1
-    // (stars). DM and gas are simply not rendered there — they don't need
-    // to be darkened or thresholded out.
+    // (stars). DM and gas are simply not rendered there.
     /* threshold*/ 0.0,
   );
   bloomComposer.addPass(bloom);

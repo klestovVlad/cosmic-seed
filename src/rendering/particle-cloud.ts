@@ -81,27 +81,30 @@ export function createParticleCloud(count: number, dpr: number): ParticleCloud {
     vertexShader: VERT_SHADER,
     fragmentShader: FRAG_SHADER,
     uniforms: {
-      // Small sprite ≈ 22 px / -mvPosition.z. At the new camera distance
-      // (~2.6 from origin), DM particles read as discrete dots rather
-      // than overlapping bokeh blobs.
-      uPointSize: { value: 22.0 },
-      // Hard cap on screen-space sprite size so particles closer to the
-      // camera don't dominate the frame as fuzzy bokeh.
+      uPointSize: { value: 24.0 },
       uMaxScreenSize: { value: 14.0 },
       uPixelRatio: { value: Math.min(dpr, 2) },
       uColorLo: { value: new THREE.Color('#2a1b3d') },
-      uColorMid: { value: new THREE.Color('#5b3f8e') },
-      uColorHi: { value: new THREE.Color('#9b7fe8') },
+      uColorMid: { value: new THREE.Color('#7a5cb8') },
+      uColorHi: { value: new THREE.Color('#cdb8ff') },
       uDensityMin: { value: 1e-3 },
       uDensityMax: { value: 1.0 },
-      // Low per-sprite alpha so halo cores don't saturate to white
-      // through additive stacking alone. Density gradient still reads
-      // because the colour ramp + alpha → opaque-violet at peak density.
-      uOpacity: { value: 0.32 },
+      // High opacity now — the previous low alpha was compensating for
+      // additive stacking. With NormalBlending each pixel shows the
+      // front-most particle, no inter-frame additive drift, no shimmer.
+      uOpacity: { value: 0.92 },
     },
     transparent: true,
     depthWrite: false,
-    blending: THREE.AdditiveBlending,
+    // NormalBlending (vs the previous AdditiveBlending) is the structural
+    // fix for "everything mельтешит": additive blending sums every
+    // overlapping particle per-pixel, so the SAME pixel shows different
+    // brightness frame-to-frame as particles drift sub-pixel — exactly
+    // the visual shimmer the user reported. Normal blending paints each
+    // pixel with the front-most particle: stable across frames, density
+    // gradient encoded by colour (deep violet → light violet) instead of
+    // luminance accumulation.
+    blending: THREE.NormalBlending,
   });
 
   const object = new THREE.Points(geometry, material);

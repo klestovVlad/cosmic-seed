@@ -33,10 +33,24 @@ const FRAG_SHADER = /* glsl */ `
     vec2 d = gl_PointCoord - vec2(0.5);
     float r2 = dot(d, d);
     if (r2 > 0.25) discard;
-    // Bright white core with soft Gaussian-ish falloff. The bloom pass in
-    // Stage 4b will turn this into the proper "first stars" glow.
-    float intensity = exp(-r2 * 12.0);
-    gl_FragColor = vec4(vec3(1.0, 0.96, 0.85) * intensity, intensity);
+    // Star sprite reads as three layered features:
+    //   1. A tight Gaussian core — the white-hot ignition point.
+    //   2. A 4-rayed cross — the diffraction-spike look every kid
+    //      knows from photographs of bright stars. Without rays the
+    //      sprite is a generic glowing dot, indistinguishable from
+    //      a dense DM clump.
+    //   3. A soft outer halo for depth.
+    // Bloom on layer 1 then blurs the whole thing into a luminous source.
+    float core = exp(-r2 * 22.0);
+    float horizontal = exp(-d.y * d.y * 600.0) * smoothstep(0.25, 0.0, r2);
+    float vertical = exp(-d.x * d.x * 600.0) * smoothstep(0.25, 0.0, r2);
+    float rays = (horizontal + vertical) * 0.45;
+    float halo = exp(-r2 * 6.0) * 0.25;
+    float intensity = (core + rays + halo) * vLum;
+    // Warm-white tone (slightly yellow) so stars don't sit in the same
+    // colour bucket as the violet DM cloud.
+    vec3 colour = vec3(1.0, 0.94, 0.78);
+    gl_FragColor = vec4(colour * intensity, clamp(intensity, 0.0, 1.0));
   }
 `;
 
@@ -66,10 +80,9 @@ export function createStarCloud(maxStars: number, dpr: number): StarCloud {
     vertexShader: VERT_SHADER,
     fragmentShader: FRAG_SHADER,
     uniforms: {
-      // Selective bloom on layer 1 amplifies the glow, so the sprite
-      // itself can stay small. At the new camera distance the bloom
-      // halo reads as a star with depth instead of a giant disc.
-      uPointSize: { value: 100.0 },
+      // Bigger sprite so the cross-rays have pixels to work with at the
+      // new camera distance. Selective bloom layer further amplifies.
+      uPointSize: { value: 220.0 },
       uPixelRatio: { value: Math.min(dpr, 2) },
     },
     transparent: true,

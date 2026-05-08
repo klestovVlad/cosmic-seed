@@ -79,18 +79,18 @@ export function createGasCloud(gasCount: number, dpr: number): GasCloud {
     vertexShader: VERT_SHADER,
     fragmentShader: FRAG_SHADER,
     uniforms: {
-      uPointSize: { value: 20.0 },
+      uPointSize: { value: 22.0 },
       uMaxScreenSize: { value: 13.0 },
       uPixelRatio: { value: Math.min(dpr, 2) },
       uTempMin: { value: 1e-3 },
       uTempMax: { value: 1.0 },
-      // See particle-cloud.ts — selective bloom plus reduced per-sprite
-      // additive intensity recover the cosmic-web contrast.
-      uOpacity: { value: 0.35 },
+      uOpacity: { value: 0.92 },
     },
     transparent: true,
     depthWrite: false,
-    blending: THREE.AdditiveBlending,
+    // Same NormalBlending switch as particle-cloud.ts — kills the
+    // inter-frame additive shimmer that read as flicker.
+    blending: THREE.NormalBlending,
   });
 
   const object = new THREE.Points(geometry, material);
