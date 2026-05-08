@@ -25,6 +25,7 @@ _None._ One UX nit from Stage 0: Vercel project still has Deployment Protection 
 
 ## Recent activity
 
+- 2026-05-08 — Added top-level `EXPERIENCE.md` (v1.0 user-experience target — 14 numbered sections), threaded clarity deliverables into Stages 2/4/5/6/7. New `DECISIONS.md` entry: educational clarity is acceptance, not polish. `CLAUDE.md` now loads `EXPERIENCE.md` every session.
 - 2026-05-08 — Stage 1b: spatial hash grid + poly6 density kernel, density-coloured particle shader (violet ramp), WebGPU capability detection + amber CPU-fallback banner, Playwright visual checkpoint at `docs/checkpoints/stage-01.png`. 19 unit tests + 2 e2e green.
 - 2026-05-08 — Stage 1a: CPU N-body physics (units, gravity, leapfrog, IC, diagnostics), 16 unit tests passing, Three.js scene + particle cloud rendering 1500-particle spherical collapse, full HUD with energy drift. All checks green.
 - 2026-05-08 — Vercel project linked, GitHub repo connected, first prod deploy live at https://cosmic-seed.vercel.app.

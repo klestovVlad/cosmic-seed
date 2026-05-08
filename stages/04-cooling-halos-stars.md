@@ -22,6 +22,17 @@ Make the gas able to cool, find halos, and ignite the first stars. Add primordia
 - [ ] `tests/physics/cooling.test.ts` — Λ(T) values match published table at sample points.
 - [ ] `tests/physics/halofinder.test.ts` — synthetic distribution with known clusters returns the right FoF groups.
 
+**Clarity deliverables (`EXPERIENCE.md` §3, §10):**
+
+- [ ] **Event bus** in the simulation runner that emits typed events when physics milestones happen: `linear-to-nonlinear`, `first-turnaround`, `first-halo`, `cosmic-web-visible`, `first-ignition`, `nth-ignition`, etc. The bus is what Stages 5 and 7 read for toasts and walkthrough cues.
+- [ ] **In-scene annotation pins** for the first halo formation, first ignition, and (toggle-controlled) the largest halo. Each pin renders a 3-second fading label in screen space pointing to a 3D anchor:
+  - "← largest halo · ~10⁶ M☉ (≈ dwarf-galaxy seed)"
+  - "first star ignited · z = X, M_halo = Y M☉"
+  - "← cosmic-web filament" (heuristic: long-axis-aligned over-density)
+- [ ] **Mass-anchor strings.** A small lookup table maps a mass range to a relatable anchor (`10⁵ M☉ → "globular-cluster mass"`, `10⁶ → "dwarf-galaxy seed"`, `10⁷ → "early dwarf galaxy"`, etc.) and is reused by pins, the HUD halo card, and the end-of-run summary in Stage 7.
+- [ ] HUD halo card lists the top-3 halos with mass + anchor + R_vir, rather than a bare count.
+- [ ] All HUD labels in this stage exist in **both** Expert and Explained registers (the toggle infrastructure lands in Stage 5; this stage just files the strings).
+
 ## Implementation steps
 
 1. **Cooling table.** Tabulate Λ_H₂(T, n) on a 2D log–log grid for `T ∈ [10, 10^5] K`, `n ∈ [10⁻², 10⁶] cm⁻³`. Bilinear interpolation. Reference: Glover & Abel (2008) compendium.
@@ -51,6 +62,8 @@ Make the gas able to cool, find halos, and ignite the first stars. Add primordia
 - [ ] Disabling Ω_DM (set to 0) yields zero halos by z = 10 — confirms Stern's "void without DM" claim.
 - [ ] Setting `J_LW = 100` delays first ignition by Δz ≥ 5 vs default.
 - [ ] No frame-rate regression beyond Stage 3.
+- [ ] Annotation pins fire on the right events; first-ignition pin includes the mass-anchor string (`EXPERIENCE.md` §3).
+- [ ] Event bus has > 95 % coverage of the milestones listed in `EXPERIENCE.md` §5 (the rest land in Stage 5/7 where the surrounding physics exists).
 
 ## Test plan
 

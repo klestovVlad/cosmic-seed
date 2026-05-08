@@ -25,6 +25,17 @@ Promote the simulation from "runs with hard-coded parameters" to "interactive te
 - [ ] Parameter changes that invalidate the run (anything affecting IC) trigger a "regenerate?" dialog rather than silently desyncing.
 - [ ] `tests/ui/parameters.test.ts` — round-trip URL serialisation, validator boundaries, preset application.
 
+**Clarity deliverables (`EXPERIENCE.md` §10, §6, §13):**
+
+- [ ] **Expert / Explained toggle** in the toolbar. Defaults to **Explained**. Persists in the URL (`x=0|1`) and in `localStorage`.
+- [ ] **Label-pair registry** (`src/ui/i18n/labels.ts`) — every physics symbol on screen has both an Expert and an Explained string, plus an optional one-line tooltip used by parameter help. The toggle just selects which key to read. Coverage is asserted by `tests/ui/labels.test.ts`: every HUD/parameter label has both registers.
+- [ ] **Plain-language tooltip on every parameter**, not just the brief's §2 list. Tooltip explains _what changes when you move it_ in physical terms, not just what the symbol means.
+- [ ] **Speed-of-time readout** updates live with the speed slider: "1 sec sim ≈ N Myr universe-time" (string formatter shared with Stage 2).
+- [ ] **Mass-anchor + length-anchor strings** in the HUD: a halo's mass is shown both as `M_halo` (Expert) and "≈ globular-cluster mass" (Explained); the box size is `1 Mpc` (Expert) and "≈ 3.26 million light-years" (Explained).
+- [ ] **Diagnostic chart captions** — each of the three charts has a one-line "what to look for" caption (e.g. "Look for the curve to bend below the dotted line — that's where the simulation goes nonlinear.").
+- [ ] **Press–Schechter overlay** on the halo-mass-function chart.
+- [ ] **Cooling-ineffective shading** on the gas phase diagram (T < 10⁴ K, low n).
+
 ## Implementation steps
 
 1. **Parameter schema.** Single source of truth in `src/state/parameters/schema.ts`: name, unit, range, default, group, description, "requires regen" flag. Used by the store, the UI, and the URL serialiser.
@@ -50,6 +61,9 @@ Promote the simulation from "runs with hard-coded parameters" to "interactive te
 - [ ] Scrub bar seeks correctly to within one checkpoint of the requested time.
 - [ ] HUD updates throttled, never causing frame drops.
 - [ ] All UI tests pass.
+- [ ] Expert/Explained toggle flips every label across the page; coverage test (`labels.test.ts`) is green.
+- [ ] Every diagnostic chart has its "what to look for" caption (`EXPERIENCE.md` §6).
+- [ ] Speed-of-time readout updates live with the speed slider (`EXPERIENCE.md` §2).
 
 ## Test plan
 

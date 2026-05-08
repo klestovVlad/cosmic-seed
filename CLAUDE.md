@@ -5,9 +5,10 @@ Educational 3D browser simulation: how dark-matter halos form, how gas falls in,
 ## Reading order at the start of every session
 
 1. **`RULES.md`** — engineering standards. Always.
-2. **`stages/STATUS.md`** — at-a-glance progress across all stages.
-3. **The stage the user named** — `stages/NN-<slug>.md`. It contains goal, deliverables, steps, acceptance criteria, and its own running notes.
-4. **`stages/DECISIONS.md`** — accumulated architectural choices and tradeoffs. Skim before making any structural decision; append a new entry when you make one.
+2. **`EXPERIENCE.md`** — v1.0 user-experience target. The "north star": every stage's deliverables map back to numbered items here. If a stage doc disagrees with this file, this file wins.
+3. **`stages/STATUS.md`** — at-a-glance progress across all stages.
+4. **The stage the user named** — `stages/NN-<slug>.md`. It contains goal, deliverables, steps, acceptance criteria, and its own running notes.
+5. **`stages/DECISIONS.md`** — accumulated architectural choices and tradeoffs. Skim before making any structural decision; append a new entry when you make one.
 
 ## How the user invokes stages
 

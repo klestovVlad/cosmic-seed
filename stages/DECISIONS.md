@@ -15,6 +15,18 @@ Format:
 
 ---
 
+## 2026-05-08 — Educational clarity is acceptance, not polish
+
+**Status:** accepted
+**Context:** After Stage 1b the demo is a beautiful purple blob with cryptic stat labels. The current plan eventually addresses readability (Stage 5 charts + parameter help, Stage 7 walkthrough/onboarding/copy), but the level of detail there isn't enough to guarantee a non-physicist can grok what's happening within 60 seconds of arriving on the page. The user explicitly asked for "точно, наглядно, понятно" by v1.0, not as a polish-pass nice-to-have.
+**Decision:** Add a top-level `EXPERIENCE.md` that defines the v1.0 user experience as concrete, numbered requirements (60-second story, persistent on-screen elements, scene annotations, onboarding, walkthrough, summary card, compare mode, About/FAQ, expert/explained toggle, mobile, accessibility, URL share, "what this is not"). `CLAUDE.md` loads it every session alongside `RULES.md`. Stages 2/4/5/6/7 add deliverables that satisfy specific items in the document. Before any stage is marked DONE, its row in `EXPERIENCE.md` §15 must be shipped — otherwise the stage is a regression on v1.0.
+**Alternatives considered:**
+
+- _Keep clarity items as a vague "Stage 7 polish" line._ Rejected — that's how educational tools end up shipping with no on-screen scale anchor and physics symbols nobody but the author understands.
+- _Pull all clarity work into Stage 7 only._ Rejected — too much surface area for one stage; better to spread it (Stage 2: scale bar + time conversion; Stage 4: scene-event pins; Stage 5: expert/explained labels + plain-language tooltips + mass anchors; Stage 6: firm compare-mode; Stage 7: onboarding/walkthrough/end-card/JWST-overlay/cinematic-intro).
+- _Build a separate "kid mode."_ Rejected — better to make the default Explained register and let physicists opt into Expert.
+  **Consequences:** Several stage docs grow new deliverables and acceptance criteria. Some items (legend, annotation pin design) appear in two stages — the earlier stage lands the data path, the later stage polishes the surface. The Expert/Explained toggle becomes a structural commitment: every label exists in both registers from Stage 5 forward. Things previously marked "optional" — JWST overlay, compare mode generalisation, onboarding — are now required.
+
 ## 2026-05-08 — Stage 1 splits again: 1b is density visuals, 1c is WebGPU compute
 
 **Status:** accepted (supersedes the 1a/1b breakdown above for the 1b boundary)

@@ -25,6 +25,21 @@ Take the working simulation and turn it into something a stranger could land on 
 - [ ] Final `tests/e2e/` smoke run covering: load, advance, share URL, restore from URL, mobile viewport.
 - [ ] Lighthouse: Performance ≥ 85, Accessibility ≥ 95, Best Practices ≥ 95, SEO ≥ 90.
 
+**Clarity deliverables (`EXPERIENCE.md` — full audit):**
+
+- [ ] **Cinematic intro** (3–4 s, skippable). Camera flies into the box from far out, scale bar appears, time strip animates from "today" backward to z = 100. Establishes scale and direction-of-time before the run starts.
+- [ ] **Legend overlay** (toggle, default off). A bottom-right panel showing what every colour means: DM density violet ramp (with sample swatches), gas temperature ramp blue→cyan→orange→white, stars white-with-bloom, cosmic-web haze. Includes the colour-blind safe alternates.
+- [ ] **Annotation pin polish** — the design (typography, anchor line, fade in/out) introduced in Stage 4 gets its visual pass here. Pins are also wired into the `aria-live="polite"` region for screen readers.
+- [ ] **Expert / Explained coverage audit.** Walk every visible string in the app; ensure each has both registers. CI test (`tests/ui/expert-explained.test.ts`) asserts no orphan symbols.
+- [ ] **End-of-run summary card** (`EXPERIENCE.md` §7). Slides in when the run hits z_end. Lists halo count by mass bucket, total stellar mass, first-ignition z and mass, max energy drift, JWST-context line, three buttons (Try another preset / Tweak parameters / Share this run).
+- [ ] **JWST overlay** — promoted from optional extension to acceptance. A toggle in the side panel adds dots representing real JWST high-z galaxy candidates (Naidu+2022, Curtis-Lake+2023) at their (z, M_UV) on the gas phase or halo-mass-function chart. Not predictive, just a "here's where reality is" anchor. Source data committed under `data/jwst-highz.json` with citations.
+- [ ] **About panel** — finalised copy: one-paragraph "what this is", citations, honest limitations (`EXPERIENCE.md` §9, §14), source code link, "Show intro again" link.
+- [ ] **FAQ** — answers the questions a curious non-physicist actually asks (precomputed list; revise after first 10 user observations): "Is this what really happened?", "Why is it 3D when JWST images are 2D?", "Why are particles purple?", "What's a halo?", "What's redshift?", "What does WDM mean?", "Could I run this on real data?".
+- [ ] **Camera auto-zoom toggle** in the toolbar (default on). Auto-zoom respects `prefers-reduced-motion`.
+- [ ] **Compare mode** generalised from Stage 6's DM-type focus to any A/B URL pair (`EXPERIENCE.md` §8).
+- [ ] **OG card generator** — Vercel OG image function that renders a current-state preview image when a share URL is linked on Twitter / Telegram / Discord. Includes the run's parameters as overlay.
+- [ ] **Mass-anchor lookup** centralised — final pass to make sure every mass shown anywhere (HUD, pin, summary card, FAQ examples) uses the same anchor strings.
+
 ## Implementation steps
 
 1. **Post-processing.** Three.js `EffectComposer` with `RenderPass` + `UnrealBloomPass` (tuned restrained) + `OutputPass`. Tone-mapping: ACES Filmic. Vignette via shader pass.
@@ -50,6 +65,10 @@ Take the working simulation and turn it into something a stranger could land on 
 - [ ] Sharing a URL on Twitter / Telegram shows the OG card preview.
 - [ ] All interactive elements keyboard-reachable; axe audit zero criticals.
 - [ ] README and About panel both have the live URL and the limitations section.
+- [ ] **A first-time user, with no prior physics, can answer the seven questions in `EXPERIENCE.md` §1 within 60 seconds of arriving.** Validate via a friend / non-physicist test before tagging v1.0; record the test in the stage's Notes / learnings section.
+- [ ] Every numbered item in `EXPERIENCE.md` (§1–§14) maps to a shipped feature. The §15 stage map is fully checked off.
+- [ ] Expert/Explained coverage test green; no orphan physics symbols.
+- [ ] End-of-run summary card, JWST overlay, cinematic intro, legend, FAQ, About all present and reachable from the toolbar.
 
 ## Test plan
 

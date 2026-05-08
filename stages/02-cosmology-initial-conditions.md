@@ -22,6 +22,13 @@ Make the simulation truly cosmological: comoving coordinates, a Friedmann backgr
 - [ ] `tests/physics/cosmology.test.ts` — H(z), D(a), critical density values match published numbers.
 - [ ] `tests/physics/linear-growth.test.ts` — at small amplitude, sim δ_max grows ∝ a with relative error < 5 %.
 
+**Clarity deliverables (`EXPERIENCE.md` §2):**
+
+- [ ] **Time strip** at the top of the viewport: `z`, `t [Myr]`, and a thin progress bar from `z_init` to `z_end`. Always visible. Plain-language `redshift` / `age of universe` labels via the Expert/Explained toggle (toggle itself lands in Stage 5; both labels live in code from Stage 2).
+- [ ] **Scale-bar widget** in the bottom-left of the viewport: `1 Mpc · 3.26 million ly` (or whatever fits the current box). Updates if the user changes box size. Pixel-accurate — measured from camera projection, not hardcoded.
+- [ ] **Speed-of-time readout**: small inline string near the time strip, "1 sec sim ≈ N Myr universe-time at this speed". Recomputed when the speed slider (lands in Stage 5) changes; for Stage 2 the value is fixed at the implicit default speed.
+- [ ] HUD includes a one-paragraph "Now showing" caption (auto-generated): "z = 47, 60 Myr after the Big Bang. Tiny seeds growing in a 1 Mpc box."
+
 ## Implementation steps
 
 1. **Cosmology background.** Implement Friedmann for flat ΛCDM. For our era of interest (z > 6) we can also expose a "matter-only" simplification per the brief (Einstein–de Sitter, `a ∝ t^(2/3)`).
@@ -45,6 +52,8 @@ Make the simulation truly cosmological: comoving coordinates, a Friedmann backgr
 - [ ] Adaptive timestep kicks in when the densest region's local dynamical time becomes < dt_max — visible in the HUD's `dt(t)` plot.
 - [ ] Run from z = 100 → z = 10 takes < 60 s on desktop with 10 k particles.
 - [ ] All cosmology and linear-growth tests pass.
+- [ ] Time strip, scale bar, speed-of-time readout, and "now showing" caption are visible on every page load (`EXPERIENCE.md` §1, §2).
+- [ ] Scale bar is dimensionally correct: 1 unit on screen at the default camera distance equals 1 unit in physical Mpc, within 5 %.
 
 ## Test plan
 

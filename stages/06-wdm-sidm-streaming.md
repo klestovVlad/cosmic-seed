@@ -17,7 +17,12 @@ Add the three "alternative dark matter / coupling" knobs that give the project i
 - [ ] `src/physics/sidm.ts` — local-rate scattering: each step, for each DM particle, probability `p = ρ · σ/m · v_rel · dt` of an isotropic momentum exchange with a random neighbour. Vectorised in a compute shader.
 - [ ] Streaming velocity in baryon IC: scalar field `V_bc` (long-coherence Gaussian) added to gas particle velocities at z_init. Decays as `1/(1+z)` automatically through comoving evolution.
 - [ ] UI: "Dark matter type" dropdown (CDM / WDM / SIDM), `m_WDM` slider, `σ/m` slider, `v_bc` slider.
-- [ ] Diagnostics: a "compare runs" feature — keep two runs side-by-side, same seed, different parameters. Two viewports, synced controls.
+- [ ] **Compare mode** (firm, not stretch — `EXPERIENCE.md` §8). Two viewports side-by-side, same seed, two parameter sets, synchronised playback. Both viewports share the time strip, scale bar, and walkthrough state. The simulation runner is doubled (one per side) but each only runs at half perf budget.
+- [ ] Built-in comparison presets accessible from the Compare panel:
+  - "Standard universe" vs "No dark matter" (Stern's central claim).
+  - "CDM" vs "WDM 2 keV" (cutoff in halo mass function).
+  - "v_bc = 0" vs "v_bc = 60 km/s" (streaming-velocity delay).
+  - "User-defined A/B" — two URL-shareable runs.
 - [ ] `tests/physics/wdm-transfer.test.ts` — T_WDM at sample k matches Bode+2001 table.
 - [ ] `tests/physics/sidm-conservation.test.ts` — SIDM scattering conserves momentum and energy.
 
@@ -29,7 +34,7 @@ Add the three "alternative dark matter / coupling" knobs that give the project i
 4. **SIDM scattering.** GPU compute pass: for each DM particle, look up nearest neighbour from the SPH grid, compute relative velocity, apply scattering probability. If accepted, draw a random isotropic direction in the centre-of-mass frame and rotate `v_rel` accordingly. Conservation by construction.
 5. **Streaming velocity.** Add a `V_bc` 3-vector to the IC parameters. Apply a single coherent shift to gas particle velocities at start. (We're not modelling the spatial coherence pattern in v1 — single-bulk-flow approximation, documented.)
 6. **UI.** Group all three under "Dark matter & coupling". Show derived quantities live: WDM cut-off mass `M_fs`, SIDM scattering rate at virial, suprasonic Mach number for v_bc.
-7. **Compare-runs view.** Stretch goal — split the canvas, run two simulations from the same seed with different parameters, share controls. If complexity blows the budget, ship A/B via "save snapshot, swap parameters, replay".
+7. **Compare mode** — firm (`EXPERIENCE.md` §8). Split-canvas, two `SimulationRunner` instances, synchronised time and camera. Each side reads its own slice of `parametersStore` (the store grows a second slot for "B"). Mobile collapses to stacked vertical viewports. The top of each viewport gets a small badge with the parameter difference ("CDM" / "WDM 2 keV").
 8. **Tests.** Integration: WDM with m = 1 keV produces visibly fewer small halos than CDM at z = 10 (count halos < 10⁵ M_sun, expect drop > 50 %). SIDM with σ/m = 1 cm²/g produces visibly cored halos (central density profile flattens vs NFW within 0.2 R_vir).
 
 ## Acceptance criteria (Definition of Done)
@@ -38,7 +43,8 @@ Add the three "alternative dark matter / coupling" knobs that give the project i
 - [ ] SIDM at σ/m = 1 cm²/g produces a flatter central density profile vs CDM at the same seed.
 - [ ] v_bc = 60 km/s delays first ignition by Δz ≥ 3 vs v_bc = 0.
 - [ ] All four cells of the truth table (CDM/WDM × low/high v_bc) run without errors.
-- [ ] Compare-view (or replay) lets the user see two side-by-side outcomes with one click.
+- [ ] Compare mode runs two viewports synchronously at the budget below.
+- [ ] All four built-in compare presets work end-to-end and produce the qualitative differences described above.
 - [ ] No frame-rate regression beyond Stage 5 in the CDM path.
 
 ## Test plan
