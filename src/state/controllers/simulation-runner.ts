@@ -8,6 +8,7 @@ import {
   centralDensity,
   computeAccelerations,
   computeDensities,
+  cosmologicalLeapfrogStep,
   type CosmologyParams,
   createLeapfrogState,
   createSpatialGrid,
@@ -49,11 +50,17 @@ export interface SimulationConfig {
   /** Redshift at which the simulation is considered to start. */
   readonly zInit: Redshift;
   /**
-   * How many Myr of cosmic time elapse per physics step. Currently independent
-   * of the `dt` used in the integrator (which is in code units); Stage 2c2
-   * unifies them by switching the leapfrog into comoving coordinates.
+   * How many Myr of cosmic time elapse per physics step. In cosmological
+   * mode this also drives the drift-scale update via aOfT(time).
    */
   readonly dtMyr: number;
+  /**
+   * Cosmological mode (Stage 2c2): runs the comoving leapfrog with periodic
+   * min-image gravity and a `1/a²` drift scale. The simulation evolves a
+   * Gaussian random field into a cosmic web. Default `false` keeps the
+   * Stage-1 spherical-collapse behaviour.
+   */
+  readonly cosmologicalMode: boolean;
 }
 
 export const DEFAULT_CONFIG: SimulationConfig = {
@@ -76,6 +83,7 @@ export const DEFAULT_CONFIG: SimulationConfig = {
   // The z = 100 → z = 6 window is about 920 Myr, so a full run is ~ 6 sec
   // of real-time simulation. Adjust in Stage 5 with the speed slider.
   dtMyr: 0.6,
+  cosmologicalMode: false,
 };
 
 export interface SimulationSnapshot {
@@ -109,16 +117,29 @@ export interface SimulationRunner {
   snapshot(): SimulationSnapshot;
 }
 
+export interface CreateSimulationRunnerOptions {
+  readonly config?: SimulationConfig;
+  /** Optional pre-built initial system. Defaults to `sphericalPerturbation(config)`. */
+  readonly initialSystem?: ParticleSystem;
+}
+
 export function createSimulationRunner(
-  config: SimulationConfig = DEFAULT_CONFIG,
+  configOrOptions: SimulationConfig | CreateSimulationRunnerOptions = DEFAULT_CONFIG,
 ): SimulationRunner {
-  const opts = { softening: config.softening, G: config.G };
-  const system = sphericalPerturbation(config);
+  // Backward-compat: caller may pass a SimulationConfig directly.
+  const opts0: CreateSimulationRunnerOptions = isOptions(configOrOptions)
+    ? configOrOptions
+    : { config: configOrOptions };
+  const config = opts0.config ?? DEFAULT_CONFIG;
+  const gravityOpts = config.cosmologicalMode
+    ? { softening: config.softening, G: config.G, periodicBoxSize: 2 * config.boxHalfExtent }
+    : { softening: config.softening, G: config.G };
+  const system = opts0.initialSystem ?? sphericalPerturbation(config);
   const state: LeapfrogState = createLeapfrogState(system, (s) => {
-    computeAccelerations(s, opts);
+    computeAccelerations(s, gravityOpts);
   });
 
-  const initialTotalEnergy = energyReport(system, opts).total;
+  const initialTotalEnergy = energyReport(system, gravityOpts).total;
   let maxCentral = centralDensity(system, config.densityProbeRadius);
 
   const densities = new Float32Array(config.count);
@@ -166,11 +187,20 @@ export function createSimulationRunner(
     },
     refreshDensities,
     step(): void {
-      leapfrogStep(state, config.dt);
+      if (config.cosmologicalMode) {
+        const a = aOfT(myr(ageInMyr), config.cosmology);
+        const aNum = asNumber(a);
+        cosmologicalLeapfrogStep(state, config.dt, {
+          driftScale: 1 / Math.max(aNum * aNum, 1e-12),
+          periodicBoxSize: 2 * config.boxHalfExtent,
+        });
+      } else {
+        leapfrogStep(state, config.dt);
+      }
       ageInMyr += config.dtMyr;
     },
     snapshot(): SimulationSnapshot {
-      const { kinetic, potential, total, virialRatio } = energyReport(system, opts);
+      const { kinetic, potential, total, virialRatio } = energyReport(system, gravityOpts);
       const rho = centralDensity(system, config.densityProbeRadius);
       if (rho > maxCentral) maxCentral = rho;
       const a = aOfT(myr(ageInMyr), config.cosmology);
@@ -193,4 +223,10 @@ export function createSimulationRunner(
       };
     },
   };
+}
+
+function isOptions(
+  v: SimulationConfig | CreateSimulationRunnerOptions,
+): v is CreateSimulationRunnerOptions {
+  return 'config' in v || 'initialSystem' in v;
 }

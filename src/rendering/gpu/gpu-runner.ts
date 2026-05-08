@@ -24,7 +24,12 @@
 import type { ParticleSystem } from '@physics/index';
 import type { GpuContext } from './device';
 import { createParticleGpuBuffers, type ParticleGpuBuffers } from './buffers';
-import { createComputePipelines, type ComputePipelines, type PipelineParams } from './pipelines';
+import {
+  createComputePipelines,
+  type ComputePipelines,
+  type PipelineParams,
+  writePipelineParams,
+} from './pipelines';
 
 export interface GpuRunnerOptions {
   readonly initialSystem: ParticleSystem;
@@ -37,6 +42,8 @@ export interface GpuRunner {
   runFrame(stepsPerFrame: number): Promise<Float32Array>;
   /** Read velocities back to CPU. Higher cost — call at HUD cadence (10 Hz), not per frame. */
   readVelocities(): Promise<Float32Array>;
+  /** Update the drift scale uniform — typically called per frame in cosmological mode. */
+  setDriftScale(scale: number): void;
   destroy(): void;
 }
 
@@ -124,6 +131,13 @@ export function createGpuRunner(ctx: GpuContext, opts: GpuRunnerOptions): GpuRun
       cpuVelocities.set(mapped);
       buffers.velocitiesStaging.unmap();
       return cpuVelocities;
+    },
+
+    setDriftScale(scale: number): void {
+      writePipelineParams(device, pipelines.uniformBuffer, {
+        ...opts.params,
+        driftScale: scale,
+      });
     },
 
     destroy(): void {

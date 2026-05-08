@@ -20,10 +20,15 @@ export interface PipelineParams {
   readonly dt: number;
   readonly softening: number;
   readonly G: number;
+  /** Periodic box side length. Set 0 to disable periodic mode. */
+  readonly boxSize: number;
+  /** 1 / a² for cosmological mode; 1 in non-cosmological mode. */
+  readonly driftScale: number;
 }
 
 const WORKGROUP_SIZE = 64;
-const UNIFORM_BYTES = 16;
+// SimParams: count u32, dt f32, soft² f32, G f32, boxSize f32, driftScale f32, 2×pad f32.
+const UNIFORM_BYTES = 32;
 
 export function createComputePipelines(
   device: GPUDevice,
@@ -94,7 +99,6 @@ export function writePipelineParams(
   uniformBuffer: GPUBuffer,
   params: PipelineParams,
 ): void {
-  // SimParams: count: u32, dt: f32, softening_sq: f32, G: f32 (16 bytes total)
   const view = new ArrayBuffer(UNIFORM_BYTES);
   const u32 = new Uint32Array(view);
   const f32 = new Float32Array(view);
@@ -102,5 +106,8 @@ export function writePipelineParams(
   f32[1] = params.dt;
   f32[2] = params.softening * params.softening;
   f32[3] = params.G;
+  f32[4] = params.boxSize;
+  f32[5] = params.driftScale;
+  // f32[6], f32[7] = padding (uninitialised → 0).
   device.queue.writeBuffer(uniformBuffer, 0, view);
 }

@@ -5,6 +5,15 @@
 //
 // Plummer softening — Aarseth (1963), see also Springel 2005 §2.1. The
 // softening length ε is a parameter, never a magic number (RULES §6).
+//
+// Stage 2c2 adds an optional `periodicBoxSize`: when set, pairwise
+// distances use the minimum-image convention so a particle near one face
+// of the box also feels the gravity of particles near the opposite face
+// (their wrapped images). For an infinite homogeneous distribution the
+// resulting net force is zero by symmetry, which is what we need for a
+// cosmologically self-consistent simulation. We don't do an Ewald sum;
+// the truncation at L/2 produces small edge artifacts which are
+// acceptable for this visual-only educational tool.
 
 import { GRAVITATIONAL_CONSTANT } from './constants';
 import type { ParticleSystem } from './particle-system';
@@ -12,12 +21,23 @@ import type { ParticleSystem } from './particle-system';
 export interface GravityOptions {
   readonly softening: number;
   readonly G?: number;
+  /** If set, use min-image distances inside a periodic box of this side length. */
+  readonly periodicBoxSize?: number;
+}
+
+function minImage(d: number, halfL: number, L: number): number {
+  if (d > halfL) return d - L;
+  if (d < -halfL) return d + L;
+  return d;
 }
 
 export function computeAccelerations(ps: ParticleSystem, opts: GravityOptions): void {
   const { positions, masses, accelerations, count } = ps;
   const eps2 = opts.softening * opts.softening;
   const G = opts.G ?? GRAVITATIONAL_CONSTANT;
+  const L = opts.periodicBoxSize ?? 0;
+  const halfL = 0.5 * L;
+  const periodic = L > 0;
 
   accelerations.fill(0);
 
@@ -32,9 +52,14 @@ export function computeAccelerations(ps: ParticleSystem, opts: GravityOptions): 
     for (let j = 0; j < count; j += 1) {
       if (j === i) continue;
       const jx = j * 4;
-      const dx = (positions[jx] ?? 0) - xi;
-      const dy = (positions[jx + 1] ?? 0) - yi;
-      const dz = (positions[jx + 2] ?? 0) - zi;
+      let dx = (positions[jx] ?? 0) - xi;
+      let dy = (positions[jx + 1] ?? 0) - yi;
+      let dz = (positions[jx + 2] ?? 0) - zi;
+      if (periodic) {
+        dx = minImage(dx, halfL, L);
+        dy = minImage(dy, halfL, L);
+        dz = minImage(dz, halfL, L);
+      }
       const r2 = dx * dx + dy * dy + dz * dz + eps2;
       const invR3 = 1 / (r2 * Math.sqrt(r2));
       const m = masses[j] ?? 0;

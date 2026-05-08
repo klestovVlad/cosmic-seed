@@ -51,4 +51,27 @@ describe('CPU gravity', () => {
     const U = potentialEnergy(ps, { softening: 1e-3, G: 1 });
     expect(U).toBeCloseTo(-1 / 4, 3);
   });
+
+  it('periodic min-image: pair at distance > L/2 sees its image at distance < L/2', () => {
+    const L = 1.0;
+    const ps = createParticleSystem(2);
+    // Particle 0 at -0.45, particle 1 at +0.45. Direct distance = 0.9 > L/2 = 0.5.
+    // Min-image distance = 1.0 - 0.9 = 0.1, with image on the +x side of particle 0.
+    setParticle(ps, 0, -0.45, 0, 0, 0, 0, 0, 1);
+    setParticle(ps, 1, 0.45, 0, 0, 0, 0, 0, 1);
+    computeAccelerations(ps, { softening: 1e-4, G: 1, periodicBoxSize: L });
+    // The image of particle 1 sits at -0.55 (i.e. left of particle 0), so the
+    // force on particle 0 should pull it in the -x direction.
+    expect(ps.accelerations[0]).toBeLessThan(0);
+    expect((ps.accelerations[0] ?? 0) + (ps.accelerations[4] ?? 0)).toBeCloseTo(0, 6);
+  });
+
+  it('non-periodic mode is unchanged when periodicBoxSize is omitted', () => {
+    const ps = createParticleSystem(2);
+    setParticle(ps, 0, -0.45, 0, 0, 0, 0, 0, 1);
+    setParticle(ps, 1, 0.45, 0, 0, 0, 0, 0, 1);
+    computeAccelerations(ps, { softening: 1e-4, G: 1 });
+    // Now particles attract directly (no periodic image), so 0 pulled in +x.
+    expect(ps.accelerations[0]).toBeGreaterThan(0);
+  });
 });

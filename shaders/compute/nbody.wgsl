@@ -16,6 +16,16 @@ struct SimParams {
   dt: f32,
   softening_sq: f32,
   G: f32,
+  // Stage 2c2: periodic min-image gravity + comoving drift factor.
+  //   boxSize  > 0 enables periodic min-image distance for the force loop
+  //              and wraps positions back into [-L/2, L/2) after drift.
+  //   driftScale = 1 / a²  (1 in non-cosmological mode). Multiplies the
+  //              per-step displacement during kickDrift to reflect the
+  //              cosmic expansion.
+  boxSize: f32,
+  driftScale: f32,
+  _pad0: f32,
+  _pad1: f32,
 }
 
 @group(0) @binding(0) var<uniform> params: SimParams;
@@ -58,8 +68,19 @@ fn forceMain(
     workgroupBarrier();
 
     let tileSize = min(WG, n - t * WG);
+    let L = params.boxSize;
+    let halfL = 0.5 * L;
+    let periodic = L > 0.0;
     for (var k: u32 = 0u; k < tileSize; k = k + 1u) {
-      let dx = tilePos[k].xyz - posI;
+      var dx = tilePos[k].xyz - posI;
+      // Periodic min-image: branch-free per component using `select`.
+      if (periodic) {
+        dx = dx - L * vec3<f32>(
+          select(0.0, 1.0, dx.x > halfL) - select(0.0, 1.0, dx.x < -halfL),
+          select(0.0, 1.0, dx.y > halfL) - select(0.0, 1.0, dx.y < -halfL),
+          select(0.0, 1.0, dx.z > halfL) - select(0.0, 1.0, dx.z < -halfL),
+        );
+      }
       let r2 = dot(dx, dx) + params.softening_sq;
       let invR = inverseSqrt(r2);
       let invR3 = invR * invR * invR;
@@ -84,7 +105,16 @@ fn kickDriftMain(@builtin(global_invocation_id) gid: vec3<u32>) {
   let halfDt = 0.5 * params.dt;
   let v = velocities[i] + accelerations[i] * halfDt;
   velocities[i] = v;
-  positions[i] = positions[i] + v * params.dt;
+  var pos = positions[i] + v * params.dt * params.driftScale;
+  // Periodic wrap into [-L/2, L/2).
+  let L = params.boxSize;
+  if (L > 0.0) {
+    let halfL = 0.5 * L;
+    pos.x = pos.x - L * floor((pos.x + halfL) / L);
+    pos.y = pos.y - L * floor((pos.y + halfL) / L);
+    pos.z = pos.z - L * floor((pos.z + halfL) / L);
+  }
+  positions[i] = pos;
 }
 
 @compute @workgroup_size(WG)

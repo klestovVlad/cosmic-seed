@@ -71,6 +71,8 @@ export {
   potentialEnergy,
 } from './gravity-cpu';
 export {
+  type CosmologicalLeapfrogOptions,
+  cosmologicalLeapfrogStep,
   createLeapfrogState,
   type ForceEvaluator,
   leapfrogStep,

@@ -53,8 +53,13 @@ export interface FrameRunner {
   destroy(): void;
 }
 
-export function createCpuFrameRunner(config: SimulationConfig): FrameRunner {
-  const inner: SimulationRunner = createSimulationRunner(config);
+export function createCpuFrameRunner(
+  config: SimulationConfig,
+  initialSystem?: ParticleSystem,
+): FrameRunner {
+  const inner: SimulationRunner = createSimulationRunner(
+    initialSystem === undefined ? { config } : { config, initialSystem },
+  );
   const positions = inner.getSystem().positions;
 
   return {
@@ -82,8 +87,12 @@ export function createCpuFrameRunner(config: SimulationConfig): FrameRunner {
   };
 }
 
-export function createGpuFrameRunner(ctx: GpuContext, config: SimulationConfig): FrameRunner {
-  const initialSystem = sphericalPerturbation(config);
+export function createGpuFrameRunner(
+  ctx: GpuContext,
+  config: SimulationConfig,
+  externalInitialSystem?: ParticleSystem,
+): FrameRunner {
+  const initialSystem = externalInitialSystem ?? sphericalPerturbation(config);
   const gpu: GpuRunner = createGpuRunner(ctx, {
     initialSystem,
     params: {
@@ -91,6 +100,8 @@ export function createGpuFrameRunner(ctx: GpuContext, config: SimulationConfig):
       dt: config.dt,
       softening: config.softening,
       G: config.G,
+      boxSize: config.cosmologicalMode ? 2 * config.boxHalfExtent : 0,
+      driftScale: 1, // updated each frame from `aOfT(time)` if cosmological.
     },
   });
 
@@ -154,6 +165,11 @@ export function createGpuFrameRunner(ctx: GpuContext, config: SimulationConfig):
     config,
 
     async runFrame(stepsPerFrame): Promise<FrameData> {
+      if (config.cosmologicalMode) {
+        const a = aOfT(myr(ageInMyr), config.cosmology);
+        const aNum = asNumber(a);
+        gpu.setDriftScale(1 / Math.max(aNum * aNum, 1e-12));
+      }
       const positions = await gpu.runFrame(stepsPerFrame);
       shadow.positions.set(positions);
       stepIndex += stepsPerFrame;

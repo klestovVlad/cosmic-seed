@@ -11,26 +11,77 @@ import {
   type FrameRunner,
 } from '@state/controllers/frame-runner';
 import { DEFAULT_CONFIG, type SimulationConfig } from '@state/controllers/simulation-runner';
+import {
+  createParticleSystem,
+  type ParticleSystem,
+  PLANCK_2018,
+  PLANCK_2018_PS,
+  redshift,
+  zeldovichField,
+} from '@physics/index';
 
 const HUD_REFRESH_HZ = 10;
 const HUD_REFRESH_INTERVAL_MS = 1000 / HUD_REFRESH_HZ;
 
-// Default GPU count is the upper bound where the compute kernel still
-// leaves the browser compositor enough GPU time to put our pixels on
-// screen. Stage 1 brief asked for 10 k; in practice that starves the
-// compositor on most laptop GPUs (HUD reports fps but the screen
-// updates at 1–2 Hz). 5 k feels comfortable across the devices tested.
-// Stage 7 lifts this with a Barnes–Hut tree (N log N) and/or
-// Three.js WebGPURenderer (shared device, no context switch).
+// Stage 2c2 — cosmological mode by default: Zeldovich IC, periodic
+// min-image gravity, comoving leapfrog with 1/a² drift scale. Particle
+// count is the cube of the Zeldovich grid resolution; we pick 16 → 4096
+// for GPU and 8 → 512 for CPU.
+const GPU_GRID = 16;
 const GPU_CONFIG: SimulationConfig = {
   ...DEFAULT_CONFIG,
-  count: 5000,
-  // Mean inter-particle separation at 5 k in a unit sphere ≈ 0.094.
-  softening: 0.045,
-  densityKernelRadius: 0.14,
+  count: GPU_GRID ** 3,
+  cosmologicalMode: true,
+  // Box size 1 in code units; particles centred on cells of L/N. Mean
+  // inter-particle separation = L/N = 1/16 = 0.0625.
+  boxHalfExtent: 0.5,
+  softening: 0.025,
+  densityKernelRadius: 0.1,
+  // Slow the integrator down a bit so the cosmic-web evolution is visible
+  // before particles fly across the box.
+  dt: 1.5e-3,
+  dtMyr: 0.4,
+  zInit: redshift(50),
 };
 
-const CPU_CONFIG: SimulationConfig = DEFAULT_CONFIG;
+const CPU_GRID = 8;
+const CPU_CONFIG: SimulationConfig = {
+  ...DEFAULT_CONFIG,
+  count: CPU_GRID ** 3,
+  cosmologicalMode: true,
+  boxHalfExtent: 0.5,
+  softening: 0.05,
+  densityKernelRadius: 0.18,
+  dt: 1.5e-3,
+  dtMyr: 0.4,
+  zInit: redshift(50),
+};
+
+const ZELDOVICH_PARAMS_GPU = {
+  cosmology: PLANCK_2018,
+  powerSpectrum: PLANCK_2018_PS,
+  seed: 42,
+  gridN: GPU_GRID,
+  boxSizeMpcH: 1.0,
+  zInit: redshift(50),
+};
+
+const ZELDOVICH_PARAMS_CPU = {
+  ...ZELDOVICH_PARAMS_GPU,
+  gridN: CPU_GRID,
+};
+
+function buildZeldovichInitialSystem(useGpu: boolean): ParticleSystem {
+  const out = zeldovichField(useGpu ? ZELDOVICH_PARAMS_GPU : ZELDOVICH_PARAMS_CPU);
+  const ps = createParticleSystem(out.positions.length / 4);
+  ps.positions.set(out.positions);
+  // Start at rest in comoving — Zeldovich peculiar velocities are tiny at
+  // z = 50 anyway, and zeroing them keeps the toy box stable while the
+  // gravity field begins to cluster the displaced grid.
+  ps.velocities.fill(0);
+  ps.masses.set(out.masses);
+  return ps;
+}
 
 export function SimulationCanvas(): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -51,11 +102,12 @@ export function SimulationCanvas(): React.JSX.Element {
 
       const useGpu = gpuCtx !== null;
       const config = useGpu ? GPU_CONFIG : CPU_CONFIG;
+      const initialSystem = buildZeldovichInitialSystem(useGpu);
       const runner: FrameRunner = useGpu
-        ? createGpuFrameRunner(gpuCtx, config)
-        : createCpuFrameRunner(config);
+        ? createGpuFrameRunner(gpuCtx, config, initialSystem)
+        : createCpuFrameRunner(config, initialSystem);
       console.warn(
-        `[sim] mode=${runner.mode} particles=${String(runner.count)} dt=${String(config.dt)} softening=${String(config.softening)}`,
+        `[sim] mode=${runner.mode} particles=${String(runner.count)} ic=zeldovich z_init=${String(config.zInit)}`,
       );
 
       useUiStore.getState().setGpuStatus(
