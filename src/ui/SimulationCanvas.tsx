@@ -48,8 +48,21 @@ const GPU_CONFIG: SimulationConfig = {
   softening: 0.018,
   densityKernelRadius: 0.06,
   dt: 1.2e-3,
-  dtMyr: 0.2,
+  // 0.08 Myr/step × 60 fps = ~ 5 Myr / real-second. The educationally-
+  // interesting window (z = 50 → first ignition near z = 18, ~ 200 Myr
+  // of cosmic time) plays out over ~ 30 s of viewing — slow enough that
+  // the time strip's age readout actually ticks where the eye can read it
+  // and a viewer can register first-halo-formation, first-ignition, and
+  // the cooling cascade as discrete beats. Stage 5d's speed slider will
+  // expose this; this is the considered default.
+  dtMyr: 0.08,
   zInit: redshift(50),
+  // 16³ = 4096 DM particles: per-particle mass is 8× smaller than the
+  // 8³ CPU mode, so M_crit needs to scale down by the same factor for
+  // halos to ignite at comparable particle-count thresholds. With
+  // unitMassPerMsun = 1.25e-9 a ~ 70-particle halo crosses M_crit at
+  // z ≈ 18 — same educational window as CPU mode.
+  unitMassPerMsun: 1.25e-9,
 };
 
 const CPU_GRID = 8;
@@ -65,7 +78,10 @@ const CPU_CONFIG: SimulationConfig = {
   softening: 0.05,
   densityKernelRadius: 0.16,
   dt: 1.2e-3,
-  dtMyr: 0.2,
+  // Same Myr/sec target as GPU mode, accounting for stepsPerFrame = 2
+  // (CPU runs more steps per frame because each step is cheaper at 512
+  // particles). Stage 5d's speed slider will expose this.
+  dtMyr: 0.04,
   zInit: redshift(50),
   gasCount: CPU_GRID ** 3,
   // u₀ small but non-zero so initial pressure exists (prevents immediate
@@ -289,9 +305,11 @@ export function SimulationCanvas(): React.JSX.Element {
           },
         },
         // 1 GPU step per frame — keeps the compute kernel short so the
-        // compositor isn't starved of GPU time. CPU path runs more steps
-        // per frame because each is much shorter at 1.5 k particles.
-        useGpu ? 1 : 4,
+        // compositor isn't starved of GPU time. CPU path runs 2/frame
+        // because each step is cheaper at 512 particles, but no more
+        // than that — the educational beats need viewing time, not
+        // numerical fast-forward.
+        useGpu ? 1 : 2,
       );
 
       const handleResize = (): void => {

@@ -14,14 +14,20 @@ import {
   createSpatialGrid,
   type DensityKernel,
   energyReport,
+  findHalos,
+  type Halo,
+  type IgnitionParams,
+  igniteEligibleHalos,
   momentumReport,
   myr,
   type ParticleSystem,
   poly6Kernel,
   rebuildSpatialGrid,
+  redshift,
   scaleFactor,
   sphericalPerturbation,
   type SpatialGrid,
+  type Star,
   tOfA,
   zOfA,
 } from '@physics/index';
@@ -149,6 +155,89 @@ export function createGpuFrameRunner(
   let simTime = 0;
   let maxParticleDensity = 0;
   let frameCounter = 0;
+
+  // Stage 4 halo finder + ignition for GPU mode (visual fix). The
+  // simulation-runner runs the same logic on the CPU path; on GPU we
+  // mirror it on the readback shadow so the user sees stars on
+  // WebGPU-capable machines too. Cost: one FoF every K steps + a small
+  // ignition pass over the resulting halos. Negligible at 4 k particles.
+  const haloMeanSep =
+    config.cosmologicalMode && config.count > 0
+      ? Math.cbrt((2 * config.boxHalfExtent) ** 3 / config.count)
+      : 0.1;
+  const haloLinkingLength = config.haloLinkingFraction * haloMeanSep;
+  const haloPeriodicSize = config.cosmologicalMode ? 2 * config.boxHalfExtent : 0;
+  const haloCellSize = Math.max(haloLinkingLength, 1e-3);
+  const haloCellsPerSide =
+    haloPeriodicSize > 0
+      ? Math.max(4, Math.floor(haloPeriodicSize / haloCellSize))
+      : Math.max(8, Math.ceil(4 / haloCellSize));
+  const haloGrid: SpatialGrid = createSpatialGrid(shadow, {
+    cellSize: haloPeriodicSize > 0 ? haloPeriodicSize / haloCellsPerSide : haloCellSize,
+    cellsPerSide: haloCellsPerSide,
+    origin: haloPeriodicSize > 0 ? -haloPeriodicSize / 2 : -2,
+  });
+  const ignitionParams: IgnitionParams = {
+    J_LW: config.ignitionJ_LW,
+    v_bc: config.ignitionVbc,
+    unitMassPerMsun: config.unitMassPerMsun,
+  };
+  let latestHalos: Halo[] = [];
+  const stars: Star[] = [];
+  let firstIgnition: SimulationSnapshot['firstIgnition'] = null;
+  let lastHaloFinderStep = -1;
+
+  const haloIsAlreadyLit = (h: Halo): boolean => {
+    const r2 = h.rVir * h.rVir;
+    for (const s of stars) {
+      const dx = h.cx - s.x;
+      const dy = h.cy - s.y;
+      const dz = h.cz - s.z;
+      if (dx * dx + dy * dy + dz * dz < r2) return true;
+    }
+    return false;
+  };
+
+  const runHaloFinderAndIgnite = (zNowNum: number): void => {
+    if (config.count === 0 || !config.cosmologicalMode) return;
+    latestHalos = findHalos(shadow, haloGrid, {
+      start: 0,
+      count: config.count,
+      linkingLength: haloLinkingLength,
+      periodicBoxSize: haloPeriodicSize,
+      minMembers: config.haloMinMembers,
+      G: config.G,
+    });
+    const eligible: Halo[] = [];
+    const eligibleIds: number[] = [];
+    for (let i = 0; i < latestHalos.length; i += 1) {
+      const halo = latestHalos[i];
+      if (halo === undefined) continue;
+      if (haloIsAlreadyLit(halo)) continue;
+      eligible.push(halo);
+      eligibleIds.push(i);
+    }
+    const result = igniteEligibleHalos(
+      eligible,
+      eligibleIds,
+      redshift(zNowNum),
+      new Set(),
+      ignitionParams,
+    );
+    for (const star of result.newStars) stars.push(star);
+    if (firstIgnition === null && result.newStars.length > 0) {
+      const first = result.newStars[0];
+      if (first !== undefined) {
+        firstIgnition = {
+          redshift: first.redshift,
+          haloMassMsun: first.hostHaloMass / config.unitMassPerMsun,
+          x: first.x,
+          y: first.y,
+          z: first.z,
+        };
+      }
+    }
+  };
   // Cosmic-time bookkeeping (Stage 2c1). Same convention as the CPU runner:
   // each physics step advances `ageInMyr` by `dtMyr` regardless of the
   // integrator's code-unit dt. Stage 2c2 unifies the two when comoving
@@ -229,13 +318,28 @@ export function createGpuFrameRunner(
         for (const rho of densities) if (rho > maxRho) maxRho = rho;
         if (maxRho > maxParticleDensity) maxParticleDensity = maxRho;
       }
+
+      // Halo finder + ignition on the readback shadow. Same cadence as the
+      // CPU runner (every K steps). At 4 k particles this is < 5 ms per
+      // pass — well inside the per-frame budget.
+      if (
+        config.cosmologicalMode &&
+        (lastHaloFinderStep === -1 ||
+          stepIndex - lastHaloFinderStep >= config.haloFinderEveryKSteps)
+      ) {
+        const aNow = aOfT(myr(ageInMyr), config.cosmology);
+        const zNow = asNumber(zOfA(aNow));
+        runHaloFinderAndIgnite(zNow);
+        lastHaloFinderStep = stepIndex;
+      }
+
       return {
         positions,
         densities,
         maxDensity: maxParticleDensity,
         gasInternalEnergy: emptyF32,
         gasDensities: emptyF32,
-        stars: [],
+        stars,
       };
     },
 
@@ -272,11 +376,14 @@ export function createGpuFrameRunner(
         gasMeanH2Fraction: 0,
         coolingMaxSubsteps: 0,
         coolingCappedThisStep: false,
-        haloCount: 0,
-        largestHaloMass: 0,
-        largestHaloCentre: null,
-        starCount: 0,
-        firstIgnition: null,
+        haloCount: latestHalos.length,
+        largestHaloMass: latestHalos[0]?.mass ?? 0,
+        largestHaloCentre:
+          latestHalos[0] !== undefined
+            ? { x: latestHalos[0].cx, y: latestHalos[0].cy, z: latestHalos[0].cz }
+            : null,
+        starCount: stars.length,
+        firstIgnition,
       };
     },
 

@@ -40,7 +40,7 @@ export function createLoop(
     await hooks.runFrame(stepsPerFrame);
 
     scene.controls.update();
-    scene.composer.render();
+    scene.render();
     hooks.onRender?.(scene);
 
     await hooks.onFrame?.(dt);

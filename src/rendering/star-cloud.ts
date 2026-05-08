@@ -1,13 +1,14 @@
 // Star cloud — bright white points marking halos that have crossed the
-// Pop III ignition threshold (Stage 4). Stage 4b adds an UnrealBloomPass
-// for the actual "first lights" feel; this minimum implementation already
-// puts a luminous core at every ignited halo.
+// Pop III ignition threshold (Stage 4). Selectively bloomed via the
+// `BLOOM_LAYER` opt-in so the surrounding DM/gas particles don't drown
+// the cosmic web in a single white halo.
 //
 // Stars are sparse: tens at most, so we allocate a generous buffer and
 // disable particles that aren't yet lit by setting their luminosity to 0
 // (the shader collapses them to zero size).
 
 import * as THREE from 'three';
+import { BLOOM_LAYER } from './scene';
 
 const VERT_SHADER = /* glsl */ `
   attribute float aLuminosity;
@@ -74,6 +75,10 @@ export function createStarCloud(maxStars: number, dpr: number): StarCloud {
   });
 
   const object = new THREE.Points(geometry, material);
+  // Opt the star cloud into the bloom layer (in addition to layer 0 so the
+  // main scene still draws it normally). Selective-bloom material swap in
+  // `scene.ts` darkens everything that isn't on this layer.
+  object.layers.enable(BLOOM_LAYER);
 
   const syncStars = (stars: readonly { x: number; y: number; z: number; mass: number }[]): void => {
     const n = Math.min(stars.length, maxStars);
