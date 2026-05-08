@@ -1,0 +1,107 @@
+import { useSimulationStore } from '@state/simulationStore';
+import { Stat } from './Stat';
+
+function fmt(n: number, digits = 3): string {
+  if (!Number.isFinite(n)) return '—';
+  const abs = Math.abs(n);
+  if (abs !== 0 && (abs < 1e-3 || abs >= 1e5)) return n.toExponential(digits);
+  return n.toFixed(digits);
+}
+
+function fmtPercent(n: number, digits = 3): string {
+  if (!Number.isFinite(n)) return '—';
+  return `${(n * 100).toFixed(digits)}%`;
+}
+
+export function Hud(): React.JSX.Element {
+  const { particleCount, isRunning, stepsPerFrame, diagnostics: d } = useSimulationStore();
+
+  const drift =
+    d.initialTotalEnergy === 0
+      ? 0
+      : (d.totalEnergy - d.initialTotalEnergy) / Math.abs(d.initialTotalEnergy);
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-20 flex flex-col p-3 text-(--color-ink-1) sm:p-4">
+      {/* Top row — wordmark + run state */}
+      <div className="flex items-start justify-between">
+        <div className="pointer-events-auto select-none">
+          <p className="font-mono text-[10px] tracking-[0.4em] text-(--color-ink-3) uppercase">
+            cosmic seed · stage 1a
+          </p>
+          <h1 className="font-mono text-2xl font-light text-(--color-ink-1) sm:text-3xl">
+            Spherical&nbsp;Collapse
+          </h1>
+        </div>
+
+        <div className="rounded-md border border-white/10 bg-black/40 px-3 py-2 backdrop-blur-sm">
+          <div className="flex items-center gap-2 text-[11px] font-mono">
+            <span
+              aria-hidden
+              className={
+                isRunning
+                  ? 'inline-block size-1.5 rounded-full bg-emerald-400'
+                  : 'inline-block size-1.5 rounded-full bg-(--color-ink-3)'
+              }
+            />
+            <span className="tracking-wider text-(--color-ink-2) uppercase">
+              {isRunning ? 'running' : 'paused'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="grow" />
+
+      {/* Bottom: stats panel */}
+      <div className="pointer-events-auto grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <section className="rounded-md border border-white/10 bg-black/40 p-3 backdrop-blur-sm">
+          <h2 className="mb-2 font-mono text-[10px] tracking-[0.3em] text-(--color-ink-3) uppercase">
+            simulation
+          </h2>
+          <div className="space-y-1">
+            <Stat label="particles" value={particleCount.toString()} />
+            <Stat label="step" value={d.step.toString()} />
+            <Stat label="time" value={fmt(d.time)} />
+            <Stat label="fps" value={fmt(d.fps, 1)} />
+            <Stat label="steps/s" value={fmt(d.stepsPerSecond, 0)} />
+            <Stat label="steps/frame" value={stepsPerFrame.toString()} />
+          </div>
+        </section>
+
+        <section className="rounded-md border border-white/10 bg-black/40 p-3 backdrop-blur-sm">
+          <h2 className="mb-2 font-mono text-[10px] tracking-[0.3em] text-(--color-ink-3) uppercase">
+            energy
+          </h2>
+          <div className="space-y-1">
+            <Stat label="kinetic T" value={fmt(d.kineticEnergy, 4)} />
+            <Stat label="potential U" value={fmt(d.potentialEnergy, 4)} />
+            <Stat label="total E" value={fmt(d.totalEnergy, 4)} />
+            <Stat
+              label="drift"
+              value={fmtPercent(drift)}
+              hint="(E − E₀) / |E₀|; integrator should keep this small."
+            />
+            <Stat label="−T/U" value={fmt(d.virialRatio, 3)} hint="0.5 in virial equilibrium" />
+            <Stat label="‖p‖" value={fmt(d.momentumMagnitude, 4)} />
+          </div>
+        </section>
+
+        <section className="rounded-md border border-white/10 bg-black/40 p-3 backdrop-blur-sm">
+          <h2 className="mb-2 font-mono text-[10px] tracking-[0.3em] text-(--color-ink-3) uppercase">
+            density
+          </h2>
+          <div className="space-y-1">
+            <Stat label="ρ central" value={fmt(d.centralDensity, 3)} />
+            <Stat label="ρ max" value={fmt(d.maxCentralDensity, 3)} />
+            <Stat
+              label="ρ / ρ₀"
+              value={fmt(d.maxCentralDensity / Math.max(1e-9, d.centralDensity || 1), 2)}
+              hint="Growth of central density relative to current."
+            />
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}

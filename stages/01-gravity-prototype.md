@@ -1,6 +1,6 @@
 # Stage 1: Gravity prototype
 
-**Status:** TODO
+**Status:** IN PROGRESS
 **Estimated:** 3–5 days
 **Depends on:** Stage 0
 **Spec reference:** Phase 0 (cosmology brief §5)
@@ -61,4 +61,41 @@ Reproduce Stern's spherically-symmetric collapse picture in 3D: 10 000 dark-matt
 
 ## Notes / learnings
 
-_(filled during work)_
+**2026-05-08 — Stage 1a landed.**
+
+Sub-stage split recorded in `DECISIONS.md` (2026-05-08 — Stage 1 split…). 1a is the CPU reference + tests + visual scaffolding; 1b will add the WebGPU compute path, density estimation/colouring, and bump the default particle count to hit the 10k @ 60 fps acceptance target.
+
+Implemented in 1a:
+
+- Branded units (`CodeLength`, `CodeMass`, `CodeTime`, `CodeVelocity`, `CodeEnergy`, `CodeDensity`) — code units, G = 1.
+- Particle data as struct-of-arrays with 16-byte stride for future GPU vec4 packing (`src/physics/particle-system.ts`).
+- Direct N² gravity with Plummer softening on the CPU (`src/physics/gravity-cpu.ts`).
+- Leapfrog Kick–Drift–Kick integrator (`src/physics/leapfrog.ts`).
+- Initial conditions: `sphericalPerturbation` (jittered grid + Gaussian inward shift), `plummerSphere` (Aarseth–Hénon–Wielen sampling), `keplerTwoBody` for tests.
+- Diagnostics: kinetic / potential / total energy, virial ratio, momentum, central density (`src/physics/diagnostics.ts`).
+- Three.js scene with `OrbitControls`, custom shader-material point cloud with distance-attenuated point sprites and additive blending.
+- Render loop decoupled from sim loop via `stepsPerFrame` (default 4) — same shape will accept a WebGPU compute step in 1b.
+- Simulation runner controller (`src/state/controllers/simulation-runner.ts`) and a Zustand `simulationStore` carrying live diagnostics.
+- HUD: 3-panel layout with simulation / energy / density columns, all driven by the runner's `snapshot()`, throttled to 10 Hz per `RULES §7`.
+
+Test coverage (16 unit tests across 6 files):
+
+- `random.test.ts` — PRNG determinism, uniform mean, Gaussian moments.
+- `gravity.test.ts` — softening finiteness, Newton's third law, inverse-square at large r, pair potential.
+- `leapfrog.test.ts` — Kepler energy drift < 0.1 % over 100 orbits, Plummer momentum drift, Plummer energy drift < 1 % over 1000 steps.
+- `plummer.test.ts` — sampled virial ratio ≈ 0.5, stays in 0.3–0.7 after 5 dynamical times.
+- `spherical-collapse.test.ts` — central density grows ≥ 2× during collapse, energy drift < 5 % over 500 steps.
+- Plus the carried-over `sanity.test.ts`.
+
+What's left for 1b:
+
+- WebGPU compute kernel (`shaders/compute/gravity.wgsl`) for direct N² with workgroup tiling.
+- Position/velocity ping-pong on the GPU.
+- Density estimation pass (fixed-radius count → colour ramp).
+- Density-coloured rendering (replace solid violet with a ramp).
+- Bump default count to 10 000 and hit ≥ 60 fps desktop / 30 fps mobile.
+- WebGPU capability detection + polite fallback message (current code assumes WebGL2; the CPU fallback path will keep 1500 particles).
+- Cross-validation test: same IC → CPU and GPU positions diverge by < 1e-4 over 100 steps.
+- Visual checkpoint screenshot at `docs/checkpoints/stage-01.png`.
+
+Bundle: 731 KB raw / 197 KB gzipped (Three.js dominates). Vite warns about chunk size > 500 KB; we'll address with code-splitting in Stage 7. Within reasonable bounds for 1a.
