@@ -75,10 +75,12 @@ export function createScene(canvas: HTMLCanvasElement): SceneHandle {
   // shrink to specks. Combined with a closer camera position this lets
   // the cube read as a sizeable 3-D object instead of a small artefact.
   const camera = new THREE.PerspectiveCamera(55, 1, 0.01, 1000);
-  // Camera distance ≈ 1.93 from origin (was 2.6). Box diagonal is 0.87,
-  // so the wireframe still fits with margin, but its on-screen footprint
-  // is about 60 % of the viewport — visibly *the* subject of the frame.
-  camera.position.set(1.0, 0.7, 1.5);
+  // Camera distance ≈ 1.32 from origin. With FOV 55° this puts the
+  // visible viewport width at ~ 1.37 — the soft-edged cluster (radius
+  // ~ 0.4 from origin via the renderer's distance fade) takes ~ 58 %
+  // of the frame, big enough to read as the subject without bleeding
+  // into the HUD.
+  camera.position.set(0.7, 0.5, 1.0);
   camera.lookAt(0, 0, 0);
   camera.layers.enableAll();
 

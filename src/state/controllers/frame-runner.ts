@@ -208,6 +208,7 @@ export function createGpuFrameRunner(
       minMembers: config.haloMinMembers,
       G: config.G,
     });
+    if (stars.length >= config.maxStars) return;
     const eligible: Halo[] = [];
     const eligibleIds: number[] = [];
     for (let i = 0; i < latestHalos.length; i += 1) {
@@ -224,7 +225,9 @@ export function createGpuFrameRunner(
       new Set(),
       ignitionParams,
     );
-    for (const star of result.newStars) stars.push(star);
+    const room = Math.max(0, config.maxStars - stars.length);
+    const sortedByMass = [...result.newStars].sort((a, b) => b.hostHaloMass - a.hostHaloMass);
+    for (const star of sortedByMass.slice(0, room)) stars.push(star);
     if (firstIgnition === null && result.newStars.length > 0) {
       const first = result.newStars[0];
       if (first !== undefined) {
@@ -258,6 +261,7 @@ export function createGpuFrameRunner(
     step: 0,
     time: 0,
     ageInMyr: initialTimeMyr,
+    dtMyr: config.dtMyr,
     scaleFactor: asNumber(a0),
     redshift: asNumber(zOfA(a0)),
     kineticEnergy: initialKinetic,
@@ -356,6 +360,7 @@ export function createGpuFrameRunner(
         step: stepIndex,
         time: simTime,
         ageInMyr,
+        dtMyr: config.dtMyr,
         scaleFactor: asNumber(a),
         redshift: asNumber(zOfA(a)),
         kineticEnergy: sumKinetic(shadow),

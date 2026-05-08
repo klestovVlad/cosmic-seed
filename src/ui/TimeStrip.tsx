@@ -29,15 +29,12 @@ export function TimeStrip(): React.JSX.Element {
   const ageInMyr = useSimulationStore((s) => s.diagnostics.ageInMyr);
   const z = useSimulationStore((s) => s.diagnostics.redshift);
   const stepsPerSecond = useSimulationStore((s) => s.diagnostics.stepsPerSecond);
+  const dtMyr = useSimulationStore((s) => s.diagnostics.dtMyr);
 
-  // The runner advances the cosmological clock by `dtMyr` per integrator step,
-  // so steps/second × dtMyr ≈ Myr/real-second. We can't read dtMyr from the
-  // runner here without coupling, but a reasonable estimate is the moving
-  // average of (Δage / Δreal-time) — proxy via stepsPerSecond × (T_END − T_INIT)
-  // / total_steps_estimate. For Stage 2c1 we display the running average derived
-  // from `stepsPerSecond × estimated_dtMyr`.
-  // The default config sets dtMyr = 0.6, so we take that as the assumption.
-  const myrPerSecond = stepsPerSecond * 0.6;
+  // True wall-clock advance rate: stepsPerSecond × Myr-per-step.
+  // Replaces the old hard-coded `0.6` assumption that lied loudly when
+  // SimulationCanvas's GPU_CONFIG used a different dtMyr.
+  const myrPerSecond = stepsPerSecond * dtMyr;
 
   const tNow = ageInMyr === 0 ? T_INIT_MYR : ageInMyr;
   const progress = Math.min(

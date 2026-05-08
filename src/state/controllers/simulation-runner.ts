@@ -104,6 +104,16 @@ export interface SimulationConfig {
   /** Streaming velocity v_bc in km/s. Default 0. */
   readonly ignitionVbc: number;
   /**
+   * Cap on the total number of Pop III ignitions across the run.
+   * EXPERIENCE.md §3 / §5 frame "first stars" as a *singular* educational
+   * milestone — a sequence of 1-3 events the viewer can point to and
+   * remember, not a fireworks display of dozens of halos lighting up
+   * over the cooling cascade. With Kulkarni+2021 + a tiny toy box the
+   * raw FoF produces ~ 18 ignitions by z = 13; capping keeps the
+   * narrative legible.
+   */
+  readonly maxStars: number;
+  /**
    * Stage 4c: enable primordial H₂ cooling in the gas-energy step. When
    * `false`, gas evolves adiabatically (Stage 3b behaviour).
    */
@@ -159,6 +169,7 @@ export const DEFAULT_CONFIG: SimulationConfig = {
   unitMassPerMsun: 1e-8,
   ignitionJ_LW: 0,
   ignitionVbc: 0,
+  maxStars: 3,
   coolingEnabled: true,
   // Calibrated for the cosmological-mode default (boxHalfExtent = 0.5,
   // dt = 1.2e-3, dtMyr = 0.2). Stage 4c2 will compute these from the
@@ -178,6 +189,9 @@ export interface SimulationSnapshot {
   readonly time: number;
   /** Cosmic time since Big Bang, Myr. */
   readonly ageInMyr: number;
+  /** Myr of cosmic time advanced per physics step — needed by the
+   *  speed-of-time readout. */
+  readonly dtMyr: number;
   /** Scale factor a(t). */
   readonly scaleFactor: number;
   /** Redshift z = 1/a − 1. */
@@ -392,6 +406,9 @@ export function createSimulationRunner(
 
   const runHaloFinderAndIgnite = (): void => {
     if (config.count === 0) return;
+    // Cap reached — keep finding halos for the HUD and pin, but skip the
+    // ignition pass.
+    const igniteAllowed = stars.length < config.maxStars;
     latestHalos = findHalos(system, haloGrid, {
       start: 0,
       count: config.count,
@@ -414,8 +431,13 @@ export function createSimulationRunner(
 
     const aNow = aOfT(myr(ageInMyr), config.cosmology);
     const zNow = zOfA(aNow);
+    if (!igniteAllowed) return;
     const result = igniteEligibleHalos(eligible, eligibleIds, zNow, new Set(), ignitionParams);
-    for (const star of result.newStars) stars.push(star);
+    // Apply the global cap by only taking up to (maxStars - stars.length) new ones,
+    // and prefer the most massive eligibles.
+    const room = Math.max(0, config.maxStars - stars.length);
+    const sortedByMass = [...result.newStars].sort((a, b) => b.hostHaloMass - a.hostHaloMass);
+    for (const star of sortedByMass.slice(0, room)) stars.push(star);
     if (firstIgnition === null && result.newStars.length > 0) {
       const first = result.newStars[0];
       if (first !== undefined) {
@@ -554,6 +576,7 @@ export function createSimulationRunner(
         step: state.step,
         time: state.time,
         ageInMyr,
+        dtMyr: config.dtMyr,
         scaleFactor: asNumber(a),
         redshift: asNumber(z),
         kineticEnergy: kinetic,

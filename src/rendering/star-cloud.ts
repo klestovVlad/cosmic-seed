@@ -47,9 +47,11 @@ const FRAG_SHADER = /* glsl */ `
     float rays = (horizontal + vertical) * 0.45;
     float halo = exp(-r2 * 6.0) * 0.25;
     float intensity = (core + rays + halo) * vLum;
-    // Warm-white tone (slightly yellow) so stars don't sit in the same
-    // colour bucket as the violet DM cloud.
-    vec3 colour = vec3(1.0, 0.94, 0.78);
+    // Bright amber-yellow (~ 3000 K colour temp). Pop III stars are
+    // physically blue-hot, but blue against violet DM = no contrast.
+    // Amber pops cleanly against the violet halo cloud — the viewer
+    // can immediately tell "ignited stars" apart from "dense DM core".
+    vec3 colour = vec3(1.0, 0.78, 0.32);
     gl_FragColor = vec4(colour * intensity, clamp(intensity, 0.0, 1.0));
   }
 `;

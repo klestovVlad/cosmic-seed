@@ -6,6 +6,8 @@ export interface SimulationDiagnostics {
   readonly time: number;
   /** Cosmic time elapsed since Big Bang, in Myr. Stage 2c+ */
   readonly ageInMyr: number;
+  /** Cosmic Myr advanced per physics step. */
+  readonly dtMyr: number;
   /** Scale factor a(t). z = 1/a − 1. Stage 2c+ */
   readonly scaleFactor: number;
   /** Redshift z. Convenience for the HUD. */
@@ -78,6 +80,7 @@ const emptyDiagnostics: SimulationDiagnostics = {
   step: 0,
   time: 0,
   ageInMyr: 0,
+  dtMyr: 0,
   scaleFactor: 0,
   redshift: 0,
   fps: 0,
