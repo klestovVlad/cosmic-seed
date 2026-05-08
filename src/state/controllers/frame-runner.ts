@@ -6,6 +6,8 @@
 // reads positions back, and computes density on CPU from the readback.
 
 import {
+  aOfT,
+  asNumber,
   centralDensity,
   computeDensities,
   createParticleSystem,
@@ -13,11 +15,15 @@ import {
   type DensityKernel,
   energyReport,
   momentumReport,
+  myr,
   type ParticleSystem,
   poly6Kernel,
   rebuildSpatialGrid,
+  scaleFactor,
   sphericalPerturbation,
   type SpatialGrid,
+  tOfA,
+  zOfA,
 } from '@physics/index';
 import type { GpuContext } from '@rendering/gpu/device';
 import { createGpuRunner, type GpuRunner } from '@rendering/gpu/gpu-runner';
@@ -109,6 +115,12 @@ export function createGpuFrameRunner(ctx: GpuContext, config: SimulationConfig):
   let simTime = 0;
   let maxParticleDensity = 0;
   let frameCounter = 0;
+  // Cosmic-time bookkeeping (Stage 2c1). Same convention as the CPU runner:
+  // each physics step advances `ageInMyr` by `dtMyr` regardless of the
+  // integrator's code-unit dt. Stage 2c2 unifies the two when comoving
+  // leapfrog lands.
+  const initialTimeMyr = computeInitialAge(config);
+  let ageInMyr = initialTimeMyr;
   // Recompute density on the readback every Nth frame; the eye doesn't see
   // the difference but the CPU spatial-grid rebuild is the largest non-GPU
   // cost. At 60 fps target this is ~ 5 Hz, plenty for the colour-mapping window.
@@ -118,9 +130,13 @@ export function createGpuFrameRunner(ctx: GpuContext, config: SimulationConfig):
   // expensive at 10k for a live readout). Stage 1c ships kinetic + momentum
   // + density only; potential/virial/drift land later. See `EXPERIENCE.md` §10.
   const initialKinetic = sumKinetic(shadow);
+  const a0 = aOfT(myr(initialTimeMyr), config.cosmology);
   let cachedSnapshot: SimulationSnapshot = {
     step: 0,
     time: 0,
+    ageInMyr: initialTimeMyr,
+    scaleFactor: asNumber(a0),
+    redshift: asNumber(zOfA(a0)),
     kineticEnergy: initialKinetic,
     potentialEnergy: Number.NaN,
     totalEnergy: Number.NaN,
@@ -142,6 +158,7 @@ export function createGpuFrameRunner(ctx: GpuContext, config: SimulationConfig):
       shadow.positions.set(positions);
       stepIndex += stepsPerFrame;
       simTime += stepsPerFrame * config.dt;
+      ageInMyr += stepsPerFrame * config.dtMyr;
       frameCounter += 1;
 
       if (frameCounter % DENSITY_REFRESH_EVERY === 0) {
@@ -162,9 +179,13 @@ export function createGpuFrameRunner(ctx: GpuContext, config: SimulationConfig):
       const velocities = await gpu.readVelocities();
       shadow.velocities.set(velocities);
       const rho = centralDensity(shadow, config.densityProbeRadius);
+      const a = aOfT(myr(ageInMyr), config.cosmology);
       cachedSnapshot = {
         step: stepIndex,
         time: simTime,
+        ageInMyr,
+        scaleFactor: asNumber(a),
+        redshift: asNumber(zOfA(a)),
         kineticEnergy: sumKinetic(shadow),
         potentialEnergy: Number.NaN,
         totalEnergy: Number.NaN,
@@ -181,6 +202,11 @@ export function createGpuFrameRunner(ctx: GpuContext, config: SimulationConfig):
       gpu.destroy();
     },
   };
+}
+
+function computeInitialAge(config: SimulationConfig): number {
+  const aInit = scaleFactor(1 / (1 + asNumber(config.zInit)));
+  return asNumber(tOfA(aInit, config.cosmology));
 }
 
 function sumKinetic(ps: ParticleSystem): number {

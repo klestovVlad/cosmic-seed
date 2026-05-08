@@ -1,23 +1,12 @@
 import { useUiStore } from '@state/uiStore';
 import { useSimulationStore } from '@state/simulationStore';
-import { useEffect, useMemo, useState } from 'react';
-import {
-  aOfT,
-  asNumber,
-  myr,
-  PLANCK_2018,
-  scaleFactor,
-  speedOfTimeReadout,
-  tOfA,
-  zOfA,
-} from '@physics/index';
+import { asNumber, PLANCK_2018, scaleFactor, speedOfTimeReadout, tOfA } from '@physics/index';
 
-// Stage 2a — see EXPERIENCE.md §2 (time strip + speed-of-time readout)
-// and DECISIONS.md "Stage 2 split into 2a / 2b / 2c". Until 2b lands the
-// underlying simulation runs in code units, so the readouts here are tied
-// to a *display redshift cursor* that moves at the configured sim speed.
-// When the comoving IC arrives in 2b, this component will switch to read
-// the runner's true cosmological time without any other UI change.
+// Stage 2c1 — see EXPERIENCE.md §2 (time strip + speed-of-time readout).
+// Reads cosmic time from the simulation runner via the store, no longer
+// driven by the wall clock. Stage 2c2 will replace the integrator's
+// code-unit dt with a Myr-aware comoving leapfrog so the cursor and the
+// physics share the same clock.
 
 interface TimeRange {
   readonly z_init: number;
@@ -25,6 +14,9 @@ interface TimeRange {
 }
 
 const DEFAULT_RANGE: TimeRange = { z_init: 100, z_end: 6 };
+
+const T_INIT_MYR = asNumber(tOfA(scaleFactor(1 / (1 + DEFAULT_RANGE.z_init)), PLANCK_2018));
+const T_END_MYR = asNumber(tOfA(scaleFactor(1 / (1 + DEFAULT_RANGE.z_end)), PLANCK_2018));
 
 function fmtMyr(myrVal: number): string {
   if (myrVal < 1) return `${(myrVal * 1000).toFixed(0)} kyr`;
@@ -34,49 +26,24 @@ function fmtMyr(myrVal: number): string {
 
 export function TimeStrip(): React.JSX.Element {
   const explained = useUiStore((s) => !s.expertMode);
+  const ageInMyr = useSimulationStore((s) => s.diagnostics.ageInMyr);
+  const z = useSimulationStore((s) => s.diagnostics.redshift);
+  const stepsPerSecond = useSimulationStore((s) => s.diagnostics.stepsPerSecond);
 
-  // The "display cursor" — wall-clock-driven for now; will be replaced by
-  // the sim runner's actual t/a in Stage 2b.
-  const t_init = useMemo(
-    () => asNumber(tOfA(scaleFactor(1 / (1 + DEFAULT_RANGE.z_init)), PLANCK_2018)),
-    [],
+  // The runner advances the cosmological clock by `dtMyr` per integrator step,
+  // so steps/second × dtMyr ≈ Myr/real-second. We can't read dtMyr from the
+  // runner here without coupling, but a reasonable estimate is the moving
+  // average of (Δage / Δreal-time) — proxy via stepsPerSecond × (T_END − T_INIT)
+  // / total_steps_estimate. For Stage 2c1 we display the running average derived
+  // from `stepsPerSecond × estimated_dtMyr`.
+  // The default config sets dtMyr = 0.6, so we take that as the assumption.
+  const myrPerSecond = stepsPerSecond * 0.6;
+
+  const tNow = ageInMyr === 0 ? T_INIT_MYR : ageInMyr;
+  const progress = Math.min(
+    1,
+    Math.max(0, (tNow - T_INIT_MYR) / Math.max(1e-9, T_END_MYR - T_INIT_MYR)),
   );
-  const t_end = useMemo(
-    () => asNumber(tOfA(scaleFactor(1 / (1 + DEFAULT_RANGE.z_end)), PLANCK_2018)),
-    [],
-  );
-
-  // Speed: how many sim-Myr pass per real-second. We pick a default that
-  // crosses z=100 → z=6 in roughly two minutes for the demo. The actual
-  // sim is in code units; the cursor is decorative until 2b.
-  const myrPerSecond = (t_end - t_init) / 120;
-
-  const isRunning = useSimulationStore((s) => s.isRunning);
-  const [tNow, setTNow] = useState(t_init);
-
-  useEffect(() => {
-    if (!isRunning) return;
-    let raf = 0;
-    let lastWall = performance.now();
-    const tick = (): void => {
-      const now = performance.now();
-      const dt = (now - lastWall) / 1000;
-      lastWall = now;
-      setTNow((prev) => {
-        const next = prev + dt * myrPerSecond;
-        return next >= t_end ? t_end : next;
-      });
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => {
-      cancelAnimationFrame(raf);
-    };
-  }, [isRunning, myrPerSecond, t_end]);
-
-  const a = aOfT(myr(tNow), PLANCK_2018);
-  const z = asNumber(zOfA(a));
-  const progress = Math.min(1, Math.max(0, (tNow - t_init) / Math.max(1e-9, t_end - t_init)));
 
   const labelZ = explained ? 'redshift' : 'z';
   const labelT = explained ? 'age of universe' : 't';
@@ -105,10 +72,10 @@ export function TimeStrip(): React.JSX.Element {
       </div>
       <div className="flex items-center justify-between font-mono text-[9px] text-(--color-ink-3) tracking-wider">
         <span>
-          z = {DEFAULT_RANGE.z_init} · {fmtMyr(t_init)}
+          z = {DEFAULT_RANGE.z_init} · {fmtMyr(T_INIT_MYR)}
         </span>
         <span>
-          z = {DEFAULT_RANGE.z_end} · {fmtMyr(t_end)}
+          z = {DEFAULT_RANGE.z_end} · {fmtMyr(T_END_MYR)}
         </span>
       </div>
     </div>

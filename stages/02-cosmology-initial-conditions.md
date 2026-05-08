@@ -1,6 +1,6 @@
 # Stage 2: Cosmology + initial conditions
 
-**Status:** IN PROGRESS (2a + 2b1 + 2b2 done; 2c next)
+**Status:** IN PROGRESS (2a + 2b1 + 2b2 done; 2c1 in flight)
 **Estimated:** 3–5 days
 **Depends on:** Stage 1
 **Spec reference:** Phase 1 (cosmology brief §5)
