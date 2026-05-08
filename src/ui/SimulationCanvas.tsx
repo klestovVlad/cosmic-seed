@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { createScene } from '@rendering/scene';
 import { createBoxFrame } from '@rendering/box-frame';
+import { createGasCloud, type GasCloud } from '@rendering/gas-cloud';
 import { createParticleCloud, type ParticleCloud } from '@rendering/particle-cloud';
 import { createLoop } from '@rendering/loop';
 import { initWebGpu } from '@rendering/gpu/device';
@@ -50,6 +51,10 @@ const GPU_CONFIG: SimulationConfig = {
 };
 
 const CPU_GRID = 8;
+// CPU mode runs Stage-3b two-species hydrodynamics: same Zeldovich field
+// gives DM at the grid cell centres and gas offset by half-cell to avoid
+// the SPH pairing instability. GPU mode stays DM-only until Stage 3c
+// adds WGSL SPH compute kernels.
 const CPU_CONFIG: SimulationConfig = {
   ...DEFAULT_CONFIG,
   count: CPU_GRID ** 3,
@@ -60,6 +65,11 @@ const CPU_CONFIG: SimulationConfig = {
   dt: 1.2e-3,
   dtMyr: 0.2,
   zInit: redshift(50),
+  gasCount: CPU_GRID ** 3,
+  // u₀ small but non-zero so initial pressure exists (prevents immediate
+  // gas collapse before adiabatic compression wakes things up).
+  gasInitialEnergy: 5e-4,
+  gasSmoothingLength: 0.18,
 };
 
 const TAMED_PS = { ...PLANCK_2018_PS, sigma8: 0.5 };
@@ -85,14 +95,58 @@ const ZELDOVICH_PARAMS_CPU = {
 };
 
 function buildZeldovichInitialSystem(useGpu: boolean): ParticleSystem {
-  const out = zeldovichField(useGpu ? ZELDOVICH_PARAMS_GPU : ZELDOVICH_PARAMS_CPU);
-  const ps = createParticleSystem(out.positions.length / 4);
-  ps.positions.set(out.positions);
-  // Start at rest in comoving — Zeldovich peculiar velocities are tiny at
-  // z = 50 anyway, and zeroing them keeps the toy box stable while the
-  // gravity field begins to cluster the displaced grid.
-  ps.velocities.fill(0);
-  ps.masses.set(out.masses);
+  const config = useGpu ? GPU_CONFIG : CPU_CONFIG;
+  const zParams = useGpu ? ZELDOVICH_PARAMS_GPU : ZELDOVICH_PARAMS_CPU;
+  const dmIc = zeldovichField(zParams);
+  const dmCount = dmIc.positions.length / 4;
+
+  if (config.gasCount === 0) {
+    // DM-only path (GPU mode for Stage 3b).
+    const ps = createParticleSystem(dmCount);
+    ps.positions.set(dmIc.positions);
+    ps.velocities.fill(0);
+    ps.masses.set(dmIc.masses);
+    return ps;
+  }
+
+  // Two-species: DM at grid cell centres, gas offset by half-cell.
+  const gridN = zParams.gridN;
+  const halfCell = zParams.boxSizeMpcH / gridN / 2;
+  const gasIc = zeldovichField(zParams);
+  const gasCount = gasIc.positions.length / 4;
+  const total = dmCount + gasCount;
+  const ps = createParticleSystem(total);
+
+  // DM particles. Mass scaled so DM contributes ~ 0.85 of total (Ω_DM/Ω_m).
+  const dmMassFactor = 0.85;
+  const gasMassFactor = 0.15;
+  for (let i = 0; i < dmCount; i += 1) {
+    const idx = i * 4;
+    ps.positions[idx] = dmIc.positions[idx] ?? 0;
+    ps.positions[idx + 1] = dmIc.positions[idx + 1] ?? 0;
+    ps.positions[idx + 2] = dmIc.positions[idx + 2] ?? 0;
+    ps.masses[i] = (dmIc.masses[i] ?? 0) * dmMassFactor;
+  }
+
+  // Gas particles, offset by + halfCell on each axis. Wrap into the box.
+  const halfL = zParams.boxSizeMpcH / 2;
+  const L = zParams.boxSizeMpcH;
+  for (let g = 0; g < gasCount; g += 1) {
+    const src = g * 4;
+    const dst = (dmCount + g) * 4;
+    let x = (gasIc.positions[src] ?? 0) + halfCell;
+    let y = (gasIc.positions[src + 1] ?? 0) + halfCell;
+    let z = (gasIc.positions[src + 2] ?? 0) + halfCell;
+    if (x > halfL) x -= L;
+    if (y > halfL) y -= L;
+    if (z > halfL) z -= L;
+    ps.positions[dst] = x;
+    ps.positions[dst + 1] = y;
+    ps.positions[dst + 2] = z;
+    ps.masses[dmCount + g] = (gasIc.masses[g] ?? 0) * gasMassFactor;
+  }
+
+  // Velocities zero everywhere — Zeldovich pec velocities at z=50 are noise.
   return ps;
 }
 
@@ -133,8 +187,11 @@ export function SimulationCanvas(): React.JSX.Element {
       );
 
       const scene = createScene(canvas);
-      const cloud: ParticleCloud = createParticleCloud(runner.count, window.devicePixelRatio);
-      scene.scene.add(cloud.object);
+      const dmCloud: ParticleCloud = createParticleCloud(runner.dmCount, window.devicePixelRatio);
+      scene.scene.add(dmCloud.object);
+      const gasCloud: GasCloud | null =
+        runner.gasCount > 0 ? createGasCloud(runner.gasCount, window.devicePixelRatio) : null;
+      if (gasCloud !== null) scene.scene.add(gasCloud.object);
       const boxFrame = config.cosmologicalMode ? createBoxFrame(config.boxHalfExtent) : null;
       if (boxFrame !== null) scene.scene.add(boxFrame.object);
 
@@ -145,20 +202,43 @@ export function SimulationCanvas(): React.JSX.Element {
       let frames = 0;
       let lastSampleAt = performance.now();
       let lastDensityRange = { min: 1e-3, max: 1.0 };
+      let lastTempRange = { min: 1e-4, max: 1e-3 };
       let initialMaxDensity = 0;
       useSimulationStore.getState().resetDensitySamples();
+
+      const dmPositionsBytes = runner.dmCount * 4;
+      const gasPositionsByteStart = dmPositionsBytes;
+      const gasPositionsByteEnd = gasPositionsByteStart + runner.gasCount * 4;
 
       const loop = createLoop(
         scene,
         {
           async runFrame(stepsPerFrame): Promise<void> {
             const frame = await runner.runFrame(stepsPerFrame);
-            cloud.syncPositions(frame.positions);
-            cloud.syncDensities(frame.densities);
+            // DM cloud: first dmCount particles + their density buffer.
+            const dmPositions = frame.positions.subarray(0, dmPositionsBytes);
+            dmCloud.syncPositions(dmPositions);
+            dmCloud.syncDensities(frame.densities);
             if (frame.maxDensity > lastDensityRange.max) {
               const min = Math.max(1e-3, frame.maxDensity * 1e-2);
-              cloud.setDensityRange(min, frame.maxDensity);
+              dmCloud.setDensityRange(min, frame.maxDensity);
               lastDensityRange = { min, max: frame.maxDensity };
+            }
+            if (gasCloud !== null && runner.gasCount > 0) {
+              const gasPositions = frame.positions.subarray(
+                gasPositionsByteStart,
+                gasPositionsByteEnd,
+              );
+              gasCloud.syncPositions(gasPositions);
+              gasCloud.syncTemperatures(frame.gasInternalEnergy);
+              // Track temperature range for the colormap window.
+              let maxT = 0;
+              for (const t of frame.gasInternalEnergy) if (t > maxT) maxT = t;
+              if (maxT > lastTempRange.max) {
+                const min = Math.max(1e-5, maxT * 5e-2);
+                gasCloud.setTemperatureRange(min, maxT);
+                lastTempRange = { min, max: maxT };
+              }
             }
           },
           async onFrame(): Promise<void> {
@@ -200,7 +280,8 @@ export function SimulationCanvas(): React.JSX.Element {
         const h = canvas.clientHeight;
         const dpr = window.devicePixelRatio;
         scene.resize(w, h, dpr);
-        cloud.resize(dpr);
+        dmCloud.resize(dpr);
+        gasCloud?.resize(dpr);
       };
 
       handleResize();
@@ -211,7 +292,8 @@ export function SimulationCanvas(): React.JSX.Element {
         loop.stop();
         useSimulationStore.getState().setRunning(false);
         window.removeEventListener('resize', handleResize);
-        cloud.dispose();
+        dmCloud.dispose();
+        gasCloud?.dispose();
         boxFrame?.dispose();
         scene.dispose();
         runner.destroy();

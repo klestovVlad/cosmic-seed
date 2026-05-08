@@ -56,7 +56,7 @@ export {
 export { fft1d, fft3d } from './fft';
 export { type ZeldovichOutput, type ZeldovichParams, zeldovichField } from './zeldovich-ic';
 export { cubicSplineKernel, type SphKernel } from './sph-kernels';
-export { computeSphDensity } from './sph-density';
+export { computeSphDensity, computeSphDensityForRange } from './sph-density';
 export { computeSphForcesAndEnergy, type SphForceOptions, type SphForceOutputs } from './sph-force';
 export { createRandom, type Random } from './random';
 export {

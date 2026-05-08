@@ -8,10 +8,13 @@ import {
   centralDensity,
   computeAccelerations,
   computeDensities,
+  computeSphDensityForRange,
+  computeSphForcesAndEnergy,
   cosmologicalLeapfrogStep,
   type CosmologyParams,
   createLeapfrogState,
   createSpatialGrid,
+  cubicSplineKernel,
   type DensityKernel,
   energyReport,
   type LeapfrogState,
@@ -26,6 +29,7 @@ import {
   redshift,
   scaleFactor,
   type SpatialGrid,
+  type SphKernel,
   sphericalPerturbation,
   tOfA,
   zOfA,
@@ -129,6 +133,10 @@ export interface SimulationRunner {
   readonly config: SimulationConfig;
   getSystem(): ParticleSystem;
   getDensities(): Float32Array;
+  /** Internal energy per gas particle; length = gasCount. */
+  getGasInternalEnergy(): Float32Array;
+  /** SPH density per gas particle; length = gasCount. */
+  getGasDensities(): Float32Array;
   /** Recompute per-particle density from current positions. Cheap (uses spatial grid). */
   refreshDensities(): void;
   step(): void;
@@ -149,17 +157,71 @@ export function createSimulationRunner(
     ? configOrOptions
     : { config: configOrOptions };
   const config = opts0.config ?? DEFAULT_CONFIG;
+  const gasCount = config.gasCount;
+  const gasStart = config.count; // DM occupy [0, count); gas at [count, count + gasCount)
+  const total = config.count + gasCount;
+
   const gravityOpts = config.cosmologicalMode
     ? { softening: config.softening, G: config.G, periodicBoxSize: 2 * config.boxHalfExtent }
     : { softening: config.softening, G: config.G };
   const system = opts0.initialSystem ?? sphericalPerturbation(config);
-  const state: LeapfrogState = createLeapfrogState(system, (s) => {
+
+  // SPH state — only allocated when there's actual gas.
+  const sphKernel: SphKernel | null =
+    gasCount > 0 ? cubicSplineKernel(config.gasSmoothingLength) : null;
+  const sphGrid: SpatialGrid | null =
+    sphKernel !== null
+      ? createSpatialGrid(system, {
+          cellSize: sphKernel.support,
+          cellsPerSide: Math.max(8, Math.ceil((2 * config.boxHalfExtent) / sphKernel.support)),
+          origin: -config.boxHalfExtent,
+        })
+      : null;
+  const gasDensities = new Float32Array(gasCount);
+  const gasInternalEnergy = new Float32Array(gasCount);
+  const sphPressureAccels = new Float32Array(gasCount * 4);
+  const sphDudt = new Float32Array(gasCount);
+  if (gasCount > 0) gasInternalEnergy.fill(config.gasInitialEnergy);
+
+  // Combined force evaluator: gravity for all + SPH pressure for gas.
+  const evaluateForces = (s: ParticleSystem): void => {
     computeAccelerations(s, gravityOpts);
-  });
+    if (gasCount > 0 && sphKernel !== null && sphGrid !== null) {
+      rebuildSpatialGrid(sphGrid, s);
+      computeSphDensityForRange(s, sphGrid, sphKernel, gasStart, gasCount, gasDensities);
+      computeSphForcesAndEnergy(
+        s,
+        sphGrid,
+        sphKernel,
+        {
+          gasStart,
+          gasCount,
+          gamma: 5 / 3,
+          internalEnergy: gasInternalEnergy,
+          densities: gasDensities,
+        },
+        { accelerations: sphPressureAccels, dudt: sphDudt },
+      );
+      // Add pressure-gradient acceleration to gas particles' main accel.
+      for (let g = 0; g < gasCount; g += 1) {
+        const idx = (gasStart + g) * 4;
+        const oi = g * 4;
+        s.accelerations[idx] = (s.accelerations[idx] ?? 0) + (sphPressureAccels[oi] ?? 0);
+        s.accelerations[idx + 1] =
+          (s.accelerations[idx + 1] ?? 0) + (sphPressureAccels[oi + 1] ?? 0);
+        s.accelerations[idx + 2] =
+          (s.accelerations[idx + 2] ?? 0) + (sphPressureAccels[oi + 2] ?? 0);
+      }
+    }
+  };
+
+  const state: LeapfrogState = createLeapfrogState(system, evaluateForces);
 
   const initialTotalEnergy = energyReport(system, gravityOpts).total;
   let maxCentral = centralDensity(system, config.densityProbeRadius);
 
+  // Density buffer for the renderer's poly6 visualisation. Sized to the DM
+  // count: we only colour DM by density. Gas is coloured by temperature.
   const densities = new Float32Array(config.count);
   const kernel: DensityKernel = poly6Kernel(config.densityKernelRadius);
   // Allow the cluster to drift modestly outside the unit box during collapse.
@@ -184,6 +246,9 @@ export function createSimulationRunner(
 
   const refreshDensities = (): void => {
     rebuildSpatialGrid(grid, system);
+    // computeDensities operates over the whole system but writes only the
+    // first `densities.length` slots. We pass DM-only output here so gas
+    // particles don't pollute the violet density mapping.
     computeDensities(system, grid, kernel, densities);
     let maxRho = 0;
     for (const rho of densities) {
@@ -204,6 +269,8 @@ export function createSimulationRunner(
       return densities;
     },
     refreshDensities,
+    getGasInternalEnergy: () => gasInternalEnergy,
+    getGasDensities: () => gasDensities,
     step(): void {
       if (config.cosmologicalMode) {
         const a = aOfT(myr(ageInMyr), config.cosmology);
@@ -216,6 +283,16 @@ export function createSimulationRunner(
         leapfrogStep(state, config.dt);
       }
       ageInMyr += config.dtMyr;
+      // Adiabatic energy update: u → u + dudt · dt. The dudt was filled
+      // by the most recent force evaluation inside the leapfrog. Floor at a
+      // small positive value so finite-precision drift can't make pressure
+      // negative.
+      if (gasCount > 0) {
+        for (let g = 0; g < gasCount; g += 1) {
+          const next = (gasInternalEnergy[g] ?? 0) + (sphDudt[g] ?? 0) * config.dt;
+          gasInternalEnergy[g] = next > 1e-9 ? next : 1e-9;
+        }
+      }
     },
     snapshot(): SimulationSnapshot {
       const { kinetic, potential, total, virialRatio } = energyReport(system, gravityOpts);
@@ -238,13 +315,39 @@ export function createSimulationRunner(
         maxCentralDensity: maxCentral,
         momentumMagnitude: momentumReport(system).magnitude,
         maxParticleDensity,
-        // Stage 3b2 will populate these from the gas state.
-        gasMassFraction: 0,
-        gasMeanInternalEnergy: 0,
-        gasMaxInternalEnergy: 0,
+        ...gasStats(),
       };
     },
   };
+
+  function gasStats(): {
+    gasMassFraction: number;
+    gasMeanInternalEnergy: number;
+    gasMaxInternalEnergy: number;
+  } {
+    if (gasCount === 0) {
+      return { gasMassFraction: 0, gasMeanInternalEnergy: 0, gasMaxInternalEnergy: 0 };
+    }
+    let totalMass = 0;
+    let gasMass = 0;
+    for (let i = 0; i < total; i += 1) {
+      const m = system.masses[i] ?? 0;
+      totalMass += m;
+      if (i >= gasStart) gasMass += m;
+    }
+    let sumU = 0;
+    let maxU = 0;
+    for (let g = 0; g < gasCount; g += 1) {
+      const u = gasInternalEnergy[g] ?? 0;
+      sumU += u;
+      if (u > maxU) maxU = u;
+    }
+    return {
+      gasMassFraction: totalMass > 0 ? gasMass / totalMass : 0,
+      gasMeanInternalEnergy: sumU / gasCount,
+      gasMaxInternalEnergy: maxU,
+    };
+  }
 }
 
 function isOptions(

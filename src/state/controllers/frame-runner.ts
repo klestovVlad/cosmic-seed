@@ -35,16 +35,25 @@ import {
 } from './simulation-runner';
 
 export interface FrameData {
-  /** count × 4 (xyz + pad) — same layout as ParticleSystem.positions. */
+  /** total × 4 (xyz + pad) — full ParticleSystem positions (DM + gas). */
   readonly positions: Float32Array;
-  /** count — per-particle smoothed density. */
+  /** dmCount — per-DM-particle smoothed density (poly6). */
   readonly densities: Float32Array;
   readonly maxDensity: number;
+  /** Gas internal energy per particle, length = gasCount. Empty if gasCount=0. */
+  readonly gasInternalEnergy: Float32Array;
+  /** SPH density per gas particle, length = gasCount. */
+  readonly gasDensities: Float32Array;
 }
 
 export interface FrameRunner {
   readonly mode: 'cpu' | 'gpu';
+  /** Total particle count (DM + gas). */
   readonly count: number;
+  /** DM particle count (positions [0, dmCount)). */
+  readonly dmCount: number;
+  /** Gas particle count (positions [dmCount, dmCount + gasCount)). */
+  readonly gasCount: number;
   readonly config: SimulationConfig;
   runFrame(stepsPerFrame: number): Promise<FrameData>;
   /** Cached snapshot. Use refreshSnapshotAsync to update before reading at HUD cadence. */
@@ -62,9 +71,14 @@ export function createCpuFrameRunner(
   );
   const positions = inner.getSystem().positions;
 
+  const dmCount = config.count;
+  const gasCount = config.gasCount;
+
   return {
     mode: 'cpu',
-    count: config.count,
+    count: dmCount + gasCount,
+    dmCount,
+    gasCount,
     config,
     runFrame(stepsPerFrame): Promise<FrameData> {
       for (let i = 0; i < stepsPerFrame; i += 1) inner.step();
@@ -72,7 +86,13 @@ export function createCpuFrameRunner(
       const densities = inner.getDensities();
       let maxRho = 0;
       for (const rho of densities) if (rho > maxRho) maxRho = rho;
-      return Promise.resolve({ positions, densities, maxDensity: maxRho });
+      return Promise.resolve({
+        positions,
+        densities,
+        maxDensity: maxRho,
+        gasInternalEnergy: inner.getGasInternalEnergy(),
+        gasDensities: inner.getGasDensities(),
+      });
     },
     snapshot(): SimulationSnapshot {
       return inner.snapshot();
@@ -162,9 +182,17 @@ export function createGpuFrameRunner(
     gasMaxInternalEnergy: 0,
   };
 
+  // GPU mode doesn't run gas SPH yet (Stage 3c will add WGSL SPH kernels).
+  // Expose gasCount = 0 even if config has gas — the SimulationCanvas will
+  // route around the GPU runner if it wants gas, or accept DM-only on GPU.
+  const dmCount = config.count;
+  const emptyF32 = new Float32Array(0);
+
   return {
     mode: 'gpu',
-    count: config.count,
+    count: dmCount,
+    dmCount,
+    gasCount: 0,
     config,
 
     async runFrame(stepsPerFrame): Promise<FrameData> {
@@ -187,7 +215,13 @@ export function createGpuFrameRunner(
         for (const rho of densities) if (rho > maxRho) maxRho = rho;
         if (maxRho > maxParticleDensity) maxParticleDensity = maxRho;
       }
-      return { positions, densities, maxDensity: maxParticleDensity };
+      return {
+        positions,
+        densities,
+        maxDensity: maxParticleDensity,
+        gasInternalEnergy: emptyF32,
+        gasDensities: emptyF32,
+      };
     },
 
     snapshot(): SimulationSnapshot {
