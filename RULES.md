@@ -118,13 +118,16 @@ Performance is a feature, not an afterthought. Each stage states its budget; sta
 
 - **Branch model:** trunk-based. `main` is always deployable. Feature work on short-lived branches off `main`.
 - **Commit message format:**
+
   ```
   <type>(<scope>): <imperative summary>
 
   <optional body explaining WHY>
   ```
+
   Types: `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `chore`, `physics` (for changes that touch correctness).
   Scopes: `physics`, `render`, `ui`, `state`, `workers`, `shaders`, `build`, `stages`.
+
 - **One logical change per commit.** Don't bundle a refactor with a feature.
 - **No "WIP" or "fix typo" commits on `main`.** Squash before merge if needed.
 - **No force-push to `main`.** Force-push on feature branches is fine.

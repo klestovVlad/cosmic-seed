@@ -16,6 +16,7 @@ Educational 3D browser simulation: how dark-matter halos form, how gas falls in,
 - `проверь стадию N` — run the stage's acceptance tests; report pass/fail.
 
 After any work on a stage:
+
 - update its `Status:` header (TODO / IN PROGRESS / BLOCKED / DONE)
 - update its **Notes / learnings** section with what was done, what surprised, what's left
 - update `stages/STATUS.md` to match

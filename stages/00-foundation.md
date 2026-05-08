@@ -1,6 +1,6 @@
 # Stage 0: Foundation
 
-**Status:** TODO
+**Status:** DONE (Vercel link pending — manual user step)
 **Estimated:** 1 day
 **Depends on:** —
 **Spec reference:** project tooling (not in cosmology brief)
@@ -63,4 +63,21 @@ Lay the engineering foundation: install the latest-stable stack, wire up linting
 
 ## Notes / learnings
 
-_(filled during work)_
+**2026-05-08 — landed.**
+
+- Stack installed at latest stable (no downgrades): React 19.2.6, Vite 8.0.11, TypeScript 6.0.3, Tailwind 4.2.4, Zustand 5.0.13, Vitest 4.1.5, Playwright 1.59.1, ESLint 10.3.0 (flat config), Prettier 3.8.3, pnpm 11.0.8.
+- TypeScript 6 deprecates `baseUrl` — paths now declared without it, with explicit `./` prefixes.
+- Vite 8's `manualChunks` API changed; removed the chunking hint for now and will revisit when bundle size warrants it.
+- pnpm 11 requires `pnpm approve-builds` to allowlist install scripts even when listed in `pnpm.onlyBuiltDependencies`. Approved `simple-git-hooks`, `esbuild`, `@tailwindcss/oxide`. CI uses `--frozen-lockfile`, which inherits the approved list.
+- Bundle: 194 KB raw / 61 KB gzipped — under the 200 KB Stage-0 budget.
+- All local checks green: `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, `pnpm test` (3 unit tests), `pnpm build`, `pnpm e2e` (1 Playwright spec, 905 ms).
+- React 19 type for component return is `React.JSX.Element`, not `JSX.Element`. Used the namespaced form throughout.
+- Three test files: `tests/sanity.test.ts`, `tests/fps-overlay.test.tsx`, `tests/e2e/loads.spec.ts`. Separate `tsconfig.e2e.json` so ESLint's project service can resolve the Playwright spec.
+- Folder skeleton present (`src/{physics,rendering,ui,state,workers}/`, `shaders/{compute,render}/`); empty modules carry `.gitkeep` placeholders so the tree survives.
+- Landing screen: animated starfield canvas behind a centred wordmark; FPS/frames overlay top-right, throttled to 10 Hz per `RULES §7`.
+
+**Open follow-ups for the user (not blocking later stages):**
+
+1. `pnpm dlx vercel link` from the repo root → connect to a Vercel project named `cosmic-seed`. After that the next push to `main` produces a live URL.
+2. Add the live URL to `README.md` under "Status".
+3. (Optional) point a custom domain at the Vercel project; otherwise default subdomain is fine.

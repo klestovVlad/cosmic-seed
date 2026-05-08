@@ -45,6 +45,7 @@ fps targets if applicable.
 ## Updating status
 
 When a stage is touched:
+
 1. Update its `Status:` header.
 2. Update the row in `STATUS.md`.
 3. Append a dated line to its **Notes / learnings** section.

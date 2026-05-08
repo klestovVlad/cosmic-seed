@@ -1,0 +1,41 @@
+@import 'tailwindcss';
+@import './tokens.css';
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    background: radial-gradient(
+        120% 90% at 50% 0%,
+        var(--color-space-3) 0%,
+        var(--color-space-2) 35%,
+        var(--color-space-0) 100%
+      )
+      fixed;
+    color: var(--color-ink-1);
+    font-family: var(--font-sans);
+    overflow: hidden;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+}
+
+@layer utilities {
+  .font-mono {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+}
