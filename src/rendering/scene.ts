@@ -25,8 +25,11 @@ export function createScene(canvas: HTMLCanvasElement): SceneHandle {
   const scene = new THREE.Scene();
 
   const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 1000);
-  // Slight 3D-tilt so the box doesn't look like a flat square.
-  camera.position.set(1.6, 1.0, 2.4);
+  // Camera is INSIDE the periodic box: edges of the wireframe go off-screen,
+  // viewport shows the interior of the simulated volume. Without this the
+  // box looks like a small object floating in space; with it, structure
+  // fills the frame and the cube edges are just hints at the periphery.
+  camera.position.set(0.7, 0.45, 1.05);
   camera.lookAt(0, 0, 0);
 
   const controls = new OrbitControls(camera, canvas);

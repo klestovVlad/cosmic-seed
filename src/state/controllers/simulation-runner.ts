@@ -61,6 +61,17 @@ export interface SimulationConfig {
    * Stage-1 spherical-collapse behaviour.
    */
   readonly cosmologicalMode: boolean;
+  /**
+   * Stage 3b: number of gas (baryon) particles in addition to `count` DM
+   * particles. Total particles in the runner's ParticleSystem is
+   * `count + gasCount`; gas occupies indices [count, count + gasCount).
+   * `0` keeps the runner pure dark-matter (legacy Stage 2 behaviour).
+   */
+  readonly gasCount: number;
+  /** Initial internal energy u₀ per gas particle (code units). */
+  readonly gasInitialEnergy: number;
+  /** SPH smoothing length h. Kernel support is 2h. */
+  readonly gasSmoothingLength: number;
 }
 
 export const DEFAULT_CONFIG: SimulationConfig = {
@@ -84,6 +95,9 @@ export const DEFAULT_CONFIG: SimulationConfig = {
   // of real-time simulation. Adjust in Stage 5 with the speed slider.
   dtMyr: 0.6,
   cosmologicalMode: false,
+  gasCount: 0,
+  gasInitialEnergy: 1e-3,
+  gasSmoothingLength: 0.06,
 };
 
 export interface SimulationSnapshot {
@@ -105,6 +119,10 @@ export interface SimulationSnapshot {
   readonly maxCentralDensity: number;
   readonly momentumMagnitude: number;
   readonly maxParticleDensity: number;
+  /** Stage 3b: gas-specific diagnostics. Zero/NaN when gasCount = 0. */
+  readonly gasMassFraction: number;
+  readonly gasMeanInternalEnergy: number;
+  readonly gasMaxInternalEnergy: number;
 }
 
 export interface SimulationRunner {
@@ -220,6 +238,10 @@ export function createSimulationRunner(
         maxCentralDensity: maxCentral,
         momentumMagnitude: momentumReport(system).magnitude,
         maxParticleDensity,
+        // Stage 3b2 will populate these from the gas state.
+        gasMassFraction: 0,
+        gasMeanInternalEnergy: 0,
+        gasMaxInternalEnergy: 0,
       };
     },
   };

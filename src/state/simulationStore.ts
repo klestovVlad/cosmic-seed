@@ -21,6 +21,10 @@ export interface SimulationDiagnostics {
   readonly maxCentralDensity: number;
   readonly maxParticleDensity: number;
   readonly momentumMagnitude: number;
+  /** Stage 3b: gas-specific (0 when gasCount = 0). */
+  readonly gasMassFraction: number;
+  readonly gasMeanInternalEnergy: number;
+  readonly gasMaxInternalEnergy: number;
 }
 
 export interface DensitySample {
@@ -63,6 +67,9 @@ const emptyDiagnostics: SimulationDiagnostics = {
   maxCentralDensity: 0,
   maxParticleDensity: 0,
   momentumMagnitude: 0,
+  gasMassFraction: 0,
+  gasMeanInternalEnergy: 0,
+  gasMaxInternalEnergy: 0,
 };
 
 const MAX_DENSITY_SAMPLES = 512;

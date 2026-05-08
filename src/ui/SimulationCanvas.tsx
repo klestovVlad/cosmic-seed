@@ -64,10 +64,16 @@ const CPU_CONFIG: SimulationConfig = {
 
 const TAMED_PS = { ...PLANCK_2018_PS, sigma8: 0.5 };
 
+// Seed picked deliberately: with σ_8 = 0.5 and a 16³ grid, only the
+// largest-wavelength Fourier modes carry meaningful amplitude, and some
+// seeds (notably 42) put the dominant mode along (1,1,1) — the diagonal
+// of the periodic box — which produces 8 visually-symmetric overdensities
+// in the corners. Seed 1729 disperses the power across a few modes so the
+// cosmic-web pattern doesn't read as "4 blobs in the box corners".
 const ZELDOVICH_PARAMS_GPU = {
   cosmology: PLANCK_2018,
   powerSpectrum: TAMED_PS,
-  seed: 42,
+  seed: 1729,
   gridN: GPU_GRID,
   boxSizeMpcH: 1.0,
   zInit: redshift(50),

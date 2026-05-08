@@ -21,7 +21,9 @@ export function createBoxFrame(halfExtent: number, color = '#5b3f8e'): BoxFrame 
   const lineMat = new THREE.LineBasicMaterial({
     color: c,
     transparent: true,
-    opacity: 0.35,
+    // Restrained — the wireframe is a "hint, not a wall". Earlier 0.35 made
+    // it dominate the visual; 0.12 keeps it as a peripheral cue.
+    opacity: 0.12,
     depthWrite: false,
   });
   const lines = new THREE.LineSegments(edges, lineMat);

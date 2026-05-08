@@ -157,6 +157,9 @@ export function createGpuFrameRunner(
     maxCentralDensity: centralDensity(shadow, config.densityProbeRadius),
     momentumMagnitude: momentumReport(shadow).magnitude,
     maxParticleDensity: 0,
+    gasMassFraction: 0,
+    gasMeanInternalEnergy: 0,
+    gasMaxInternalEnergy: 0,
   };
 
   return {
@@ -211,6 +214,9 @@ export function createGpuFrameRunner(
         maxCentralDensity: Math.max(rho, cachedSnapshot.maxCentralDensity),
         momentumMagnitude: momentumReport(shadow).magnitude,
         maxParticleDensity,
+        gasMassFraction: 0,
+        gasMeanInternalEnergy: 0,
+        gasMaxInternalEnergy: 0,
       };
     },
 
