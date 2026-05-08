@@ -15,6 +15,24 @@ Format:
 
 ---
 
+## 2026-05-08 — Stage 3 splits into 3a / 3b / 3c / 3d
+
+**Status:** accepted
+**Context:** Stage 3 in the brief covers an entire SPH layer — kernel, density estimator, pressure-gradient force, artificial viscosity, energy equation with adiabatic / shock heating, two-species particle layout, gas IC offset by half-grid, gas particle rendering coloured by temperature, plus the Sod-shock-tube test and a free-fall isothermal-collapse check. That's the brief's full week of work, similar in scope to Stage 2.
+**Decision:**
+
+- **3a** (this session): pure SPH math — cubic-spline kernel `W(r, h)` and gradient, density estimator using the Stage 1b spatial hash grid, tests for kernel normalisation, gradient continuity, density on uniform and Plummer distributions.
+- **3b**: two-species particle layout (DM + gas), gas IC (same Zeldovich field offset by half-grid to avoid the pairing instability), pressure equation `P = (γ−1) ρ u`, symmetrised pressure-gradient force, Monaghan artificial viscosity, adiabatic energy update + viscous heating, modified leapfrog with the new force terms, gas particle rendering with a temperature ramp (blue → cyan → orange → white-hot), HUD additions for gas mass / mean T / max T.
+- **3c**: WGSL compute kernels for SPH density and SPH force, GPU-side spatial hash, gas-particle staging buffers in the GPU runner.
+- **3d**: Sod-shock-tube regression test (1-D periodic setup projected onto 3-D), isothermal-collapse self-similar check, refreshed visual checkpoint, Stage 3 closes.
+
+**Alternatives considered:**
+
+- _Land it all in one push._ Rejected — same risk pattern as Stage 1c / 2c2; SPH has more numerical-stability footguns (kernel pairing, viscosity tuning, energy-conservation drift) than gravity, and rushing the math layer makes the whole stage flaky.
+- _Use an off-the-shelf SPH library._ Rejected — keeps us dependent on a 3-D hydro lib we'd have to learn; the kernel + force pass is a few hundred lines of straightforward code we can review ourselves.
+
+**Consequences:** four pushes for Stage 3 instead of one, each visually progressive: 3a no UI change (foundations); 3b switches the visual to two-species coloured-by-temperature gas (the big reveal — halos stop pulsing); 3c lifts particle counts back; 3d certifies physics with the standard tests.
+
 ## 2026-05-08 — Stage 2 split into 2a / 2b / 2c
 
 **Status:** accepted

@@ -55,6 +55,8 @@ export {
 } from './power-spectrum';
 export { fft1d, fft3d } from './fft';
 export { type ZeldovichOutput, type ZeldovichParams, zeldovichField } from './zeldovich-ic';
+export { cubicSplineKernel, type SphKernel } from './sph-kernels';
+export { computeSphDensity } from './sph-density';
 export { createRandom, type Random } from './random';
 export {
   centerOfMass,

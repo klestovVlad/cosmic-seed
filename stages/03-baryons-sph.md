@@ -1,6 +1,6 @@
 # Stage 3: Baryons & SPH
 
-**Status:** TODO
+**Status:** IN PROGRESS (3a in flight)
 **Estimated:** 1 week
 **Depends on:** Stage 2
 **Spec reference:** Phase 2 (cosmology brief §5, §1.5)
