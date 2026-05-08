@@ -15,20 +15,19 @@ import { DEFAULT_CONFIG, type SimulationConfig } from '@state/controllers/simula
 const HUD_REFRESH_HZ = 10;
 const HUD_REFRESH_INTERVAL_MS = 1000 / HUD_REFRESH_HZ;
 
-// Default GPU count: deliberately conservative. Direct N² + WebGPU compute
-// has to share GPU time with Three.js WebGL render — every context switch
-// costs, and a heavy compute kernel can starve the browser compositor (the
-// thing that puts our pixels on the screen). The user reports HUD showing
-// 20 fps but the screen feeling like 1–2: that's compositor contention,
-// not a wrong counter. Cap at 2.5 k to leave headroom for compositor; we
-// lift this with a Barnes–Hut tree (N log N) and/or WebGPURenderer (shared
-// device) in Stage 7.
+// Default GPU count is the upper bound where the compute kernel still
+// leaves the browser compositor enough GPU time to put our pixels on
+// screen. Stage 1 brief asked for 10 k; in practice that starves the
+// compositor on most laptop GPUs (HUD reports fps but the screen
+// updates at 1–2 Hz). 5 k feels comfortable across the devices tested.
+// Stage 7 lifts this with a Barnes–Hut tree (N log N) and/or
+// Three.js WebGPURenderer (shared device, no context switch).
 const GPU_CONFIG: SimulationConfig = {
   ...DEFAULT_CONFIG,
-  count: 2500,
-  // Mean inter-particle separation at 2.5 k in a unit sphere ≈ 0.118.
-  softening: 0.06,
-  densityKernelRadius: 0.18,
+  count: 5000,
+  // Mean inter-particle separation at 5 k in a unit sphere ≈ 0.094.
+  softening: 0.045,
+  densityKernelRadius: 0.14,
 };
 
 const CPU_CONFIG: SimulationConfig = DEFAULT_CONFIG;
