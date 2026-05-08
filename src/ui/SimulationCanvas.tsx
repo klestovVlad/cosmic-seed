@@ -40,7 +40,7 @@ export function SimulationCanvas(): React.JSX.Element {
     void (async (): Promise<void> => {
       const gpuCtx = await initWebGpu();
       if (lifecycle.cancelled) {
-        gpuCtx?.device.destroy();
+        gpuCtx?.destroy();
         return;
       }
 
@@ -127,7 +127,7 @@ export function SimulationCanvas(): React.JSX.Element {
         cloud.dispose();
         scene.dispose();
         runner.destroy();
-        gpuCtx?.device.destroy();
+        gpuCtx?.destroy();
       };
     })().catch((err: unknown) => {
       console.error('[sim-canvas] init failed', err);

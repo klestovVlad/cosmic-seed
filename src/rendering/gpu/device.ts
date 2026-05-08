@@ -8,6 +8,8 @@ export interface GpuContext {
   readonly adapter: GPUAdapter;
   readonly device: GPUDevice;
   readonly queue: GPUQueue;
+  /** Marks the impending destroy as intentional so the lost handler stays quiet. */
+  destroy(): void;
 }
 
 export async function initWebGpu(): Promise<GpuContext | null> {
@@ -17,11 +19,25 @@ export async function initWebGpu(): Promise<GpuContext | null> {
   if (adapter === null) return null;
 
   const device = await adapter.requestDevice();
+
+  // Distinguish "we destroyed it" (expected) from a genuine device loss
+  // (browser GPU process restart, OS reset, …).
+  let intentional = false;
   device.lost.then(
     (info) => {
-      console.warn('[gpu] device lost:', info.reason, info.message);
+      if (intentional) return;
+      console.warn('[gpu] device lost unexpectedly:', info.reason, info.message);
     },
     () => undefined,
   );
-  return { adapter, device, queue: device.queue };
+
+  return {
+    adapter,
+    device,
+    queue: device.queue,
+    destroy(): void {
+      intentional = true;
+      device.destroy();
+    },
+  };
 }
