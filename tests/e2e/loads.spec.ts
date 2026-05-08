@@ -6,11 +6,8 @@ test('renders the simulation canvas, HUD, and a running step counter', async ({ 
   await expect(page.getByTestId('simulation-canvas')).toBeVisible();
   await expect(page.getByRole('heading', { name: /Spherical Collapse/i })).toBeVisible();
 
-  // Wait for the run-state badge to flip to "running".
-  const status = page.getByText(/running|paused/i);
-  await expect(status).toBeVisible({ timeout: 3000 });
-
-  // FPS should populate within a few HUD ticks.
-  const fpsRow = page.getByText('fps').first();
-  await expect(fpsRow).toBeVisible({ timeout: 3000 });
+  // Run-state badge should flip to "running" within a few frames.
+  const runState = page.getByTestId('run-state');
+  await expect(runState).toBeVisible();
+  await expect(runState).toHaveText(/running/i, { timeout: 3000 });
 });

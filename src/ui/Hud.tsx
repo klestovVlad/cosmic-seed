@@ -27,7 +27,7 @@ export function Hud(): React.JSX.Element {
       <div className="flex items-start justify-between">
         <div className="pointer-events-auto select-none">
           <p className="font-mono text-[10px] tracking-[0.4em] text-(--color-ink-3) uppercase">
-            cosmic seed · stage 1a
+            cosmic seed · stage 1b
           </p>
           <h1 className="font-mono text-2xl font-light text-(--color-ink-1) sm:text-3xl">
             Spherical&nbsp;Collapse
@@ -44,7 +44,7 @@ export function Hud(): React.JSX.Element {
                   : 'inline-block size-1.5 rounded-full bg-(--color-ink-3)'
               }
             />
-            <span className="tracking-wider text-(--color-ink-2) uppercase">
+            <span data-testid="run-state" className="tracking-wider text-(--color-ink-2) uppercase">
               {isRunning ? 'running' : 'paused'}
             </span>
           </div>

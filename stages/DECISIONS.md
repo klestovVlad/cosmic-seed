@@ -15,6 +15,18 @@ Format:
 
 ---
 
+## 2026-05-08 — Stage 1 splits again: 1b is density visuals, 1c is WebGPU compute
+
+**Status:** accepted (supersedes the 1a/1b breakdown above for the 1b boundary)
+**Context:** The original 1b scope (full WebGPU compute pipeline + density + 10k particles + cross-validation test + capability fallback + visual checkpoint) is genuinely a 3–5 day chunk and trying to land it in one session compresses the WebGPU work and risks shallow tests. We want a visible upgrade to ship every session.
+**Decision:** Stage 1b ships the visual half of the brief without touching compute: spatial-grid density estimation (CPU, O(N) per particle for a constant-density box), density-coloured particle rendering with a violet ramp, WebGPU capability detection + a UI banner, and a visual checkpoint test. Stage 1c follows with the actual WebGPU compute pipeline: force kernel (direct N² with workgroup tiling), leapfrog kernels (kick-drift, kick), GPU-side density, async runner, 10k particles at ≥ 60 fps desktop, and the CPU↔GPU cross-validation regression test.
+**Alternatives considered:**
+
+- _Push WebGPU compute through 1b regardless._ Rejected — high risk of half-baked compute pipeline and shallow tests.
+- _Skip density colouring until 1c._ Rejected — the visual is the most impactful change a user notices.
+- _CPU-only with Barnes–Hut for 10k._ Rejected — diverges from the spec ("direct N² on GPU") and we'd have to re-do it for Stage 3 anyway.
+  **Consequences:** Stage 1's "10k @ 60 fps" acceptance moves to the end of 1c. Stage 1 stays IN PROGRESS until 1c lands. The CPU reference path becomes the permanent fallback for browsers without WebGPU, which is what we want.
+
 ## 2026-05-08 — Two-track gravity: CPU reference + WebGPU runtime
 
 **Status:** accepted

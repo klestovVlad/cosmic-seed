@@ -7,6 +7,9 @@ import { createSimulationRunner, DEFAULT_CONFIG } from '@state/controllers/simul
 
 const HUD_REFRESH_HZ = 10;
 const HUD_REFRESH_INTERVAL_MS = 1000 / HUD_REFRESH_HZ;
+// How often (in render frames) we recompute densities for the colormap. Every
+// frame is overkill for the eye and CPU; ~ 6 Hz is plenty.
+const DENSITY_REFRESH_EVERY_N_FRAMES = 10;
 
 export function SimulationCanvas(): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -23,12 +26,13 @@ export function SimulationCanvas(): React.JSX.Element {
 
     store.setParticleCount(runner.config.count);
 
-    // Initial paint before any simulation step.
-    cloud.syncFrom(runner.getSystem());
+    cloud.syncPositions(runner.getSystem());
+    cloud.syncDensities(runner.getDensities());
 
     let frames = 0;
     let stepsThisInterval = 0;
     let lastSampleAt = performance.now();
+    let frameCount = 0;
 
     const loop = createLoop(
       scene,
@@ -38,7 +42,18 @@ export function SimulationCanvas(): React.JSX.Element {
           stepsThisInterval += 1;
         },
         syncRender: () => {
-          cloud.syncFrom(runner.getSystem());
+          cloud.syncPositions(runner.getSystem());
+          frameCount += 1;
+          if (frameCount % DENSITY_REFRESH_EVERY_N_FRAMES === 0) {
+            runner.refreshDensities();
+            cloud.syncDensities(runner.getDensities());
+            const snap = runner.snapshot();
+            // The renderer maps density logarithmically. Use a small floor for
+            // initial uniform-density frames; track the running peak.
+            const min = Math.max(1e-3, snap.maxParticleDensity * 1e-2);
+            const max = Math.max(min * 10, snap.maxParticleDensity);
+            cloud.setDensityRange(min, max);
+          }
         },
         onFrame: () => {
           frames += 1;

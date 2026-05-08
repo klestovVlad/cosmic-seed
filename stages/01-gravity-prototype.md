@@ -87,15 +87,31 @@ Test coverage (16 unit tests across 6 files):
 - `spherical-collapse.test.ts` — central density grows ≥ 2× during collapse, energy drift < 5 % over 500 steps.
 - Plus the carried-over `sanity.test.ts`.
 
-What's left for 1b:
+**2026-05-08 — Stage 1b landed.** (Sub-stage split recorded in `DECISIONS.md` 2026-05-08 — Stage 1 splits again.) The compute-pipeline half of the original 1b moved to a new sub-stage 1c so 1b could ship a tight visual upgrade.
+
+Implemented in 1b:
+
+- `src/physics/spatial-grid.ts` — uniform spatial hash with linked-list cells; `rebuildSpatialGrid` rehashes from positions, `computeDensities` does a 27-cell stencil walk to fill a per-particle density buffer.
+- `poly6Kernel(h)` — Müller, Charypar, Gross 2003 SPH kernel `(315 / 64πh⁹)·(h²−r²)³`, normalised to integrate to 1.
+- `simulation-runner` extended: owns the grid + density buffer, exposes `getDensities()` and `refreshDensities()`, includes `maxParticleDensity` in `snapshot()`.
+- `particle-cloud` shader updated: takes a per-particle `aDensity` attribute, log-scales it against a `uDensityMin/uDensityMax` window, and ramps through three palette stops (`#2a1b3d → #5b3f8e → #9b7fe8`) with a small additive halo on the densest sprites.
+- `SimulationCanvas` recomputes density every 10 frames (≈ 6 Hz) and updates the cloud's `setDensityRange` from the running maximum, so the colour-mapping window tracks the collapse.
+- `src/rendering/gpu/capabilities.ts` — `detectWebGpu()` checks `navigator.gpu` and requests an adapter; returns a typed `GpuStatus` discriminated union.
+- `src/state/uiStore` extended with the `gpuStatus` slot.
+- `src/ui/CompatibilityBanner.tsx` — amber "running on the CPU fallback" banner that appears only when WebGPU isn't available; named-checked by Stage 1c.
+- `tests/physics/spatial-grid.test.ts` — three tests: every particle ends up in a cell, the kernel integrates to ≈ 1 over its support, density at a clustered point is ≥ 5× a lonely point.
+- `tests/e2e/checkpoint.spec.ts` — Playwright spec that loads, lets the run settle for 2.5 s, and writes `docs/checkpoints/stage-01.png` (1280 × 800).
+
+Test totals: 19 unit tests across 7 files; 2 e2e specs (load + checkpoint). All green.
+
+What's left for **Stage 1c**:
 
 - WebGPU compute kernel (`shaders/compute/gravity.wgsl`) for direct N² with workgroup tiling.
-- Position/velocity ping-pong on the GPU.
-- Density estimation pass (fixed-radius count → colour ramp).
-- Density-coloured rendering (replace solid violet with a ramp).
-- Bump default count to 10 000 and hit ≥ 60 fps desktop / 30 fps mobile.
-- WebGPU capability detection + polite fallback message (current code assumes WebGL2; the CPU fallback path will keep 1500 particles).
-- Cross-validation test: same IC → CPU and GPU positions diverge by < 1e-4 over 100 steps.
-- Visual checkpoint screenshot at `docs/checkpoints/stage-01.png`.
+- Position/velocity buffers on the GPU; leapfrog kick-drift and kick compute kernels.
+- GPU density pass (replace the CPU fallback path).
+- Async simulation runner (`step()` queues; `flushAsync()` submits + reads back positions for rendering).
+- Bump default count to 10 000; hit ≥ 60 fps desktop / 30 fps mobile.
+- Cross-validation test: same IC → CPU and GPU positions diverge < 1e-4 over 100 steps.
+- Refresh `docs/checkpoints/stage-01.png` at the new particle count and density.
 
-Bundle: 731 KB raw / 197 KB gzipped (Three.js dominates). Vite warns about chunk size > 500 KB; we'll address with code-splitting in Stage 7. Within reasonable bounds for 1a.
+Bundle: 736 KB raw / 199 KB gzipped (Three.js dominates). Code-splitting deferred to Stage 7.

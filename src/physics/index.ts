@@ -51,3 +51,12 @@ export {
   type MomentumReport,
   momentumReport,
 } from './diagnostics';
+export {
+  computeDensities,
+  createSpatialGrid,
+  type DensityKernel,
+  poly6Kernel,
+  rebuildSpatialGrid,
+  type SpatialGrid,
+  type SpatialGridSpec,
+} from './spatial-grid';
