@@ -43,6 +43,17 @@ export {
   tOfA,
   aOfT,
 } from './cosmology';
+export {
+  amplitudeFromSigma8,
+  eisensteinHuTransfer,
+  PLANCK_2018_PS,
+  type PowerSpectrumParams,
+  powerSpectrum,
+  powerSpectrumShape,
+  sigma8,
+  topHatWindow,
+} from './power-spectrum';
+export { fft1d, fft3d } from './fft';
 export { createRandom, type Random } from './random';
 export {
   centerOfMass,
