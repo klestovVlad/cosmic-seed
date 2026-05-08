@@ -1,7 +1,6 @@
-// Render + simulation loop. The simulation step is decoupled from the render
-// step: we run K simulation substeps per frame so that visual time advances
-// at a configurable rate independently of frame-rate jitter. This is the
-// pattern we'll keep when WebGPU compute lands in Stage 1b.
+// Render + simulation loop. The simulation step can be sync (CPU runner) or
+// async (GPU runner with mapAsync readback). Hook callbacks may return
+// Promises; the loop awaits them before submitting the next RAF.
 
 import type { SceneHandle } from './scene';
 
@@ -13,12 +12,10 @@ export interface LoopController {
 }
 
 export interface LoopHooks {
-  /** Run one physics step (called `stepsPerFrame` times each frame). */
-  simulate(): void;
-  /** Push the latest particle positions into the GPU buffers. */
-  syncRender(): void;
+  /** Run K simulation steps and update render-side buffers. May be async. */
+  runFrame(stepsPerFrame: number): void | Promise<void>;
   /** Optional per-frame callback for HUD updates. Throttled by the caller. */
-  onFrame?: ((dtMs: number) => void) | undefined;
+  onFrame?: ((dtMs: number) => void | Promise<void>) | undefined;
 }
 
 export function createLoop(
@@ -31,22 +28,26 @@ export function createLoop(
   let running = false;
   let lastFrameTime = 0;
 
-  const tick = (now: number): void => {
+  const tick = async (now: number): Promise<void> => {
     if (!running) return;
     const dt = lastFrameTime === 0 ? 16.7 : now - lastFrameTime;
     lastFrameTime = now;
 
-    for (let i = 0; i < stepsPerFrame; i += 1) {
-      hooks.simulate();
-    }
-    hooks.syncRender();
+    await hooks.runFrame(stepsPerFrame);
 
     scene.controls.update();
     scene.renderer.render(scene.scene, scene.camera);
 
-    hooks.onFrame?.(dt);
+    await hooks.onFrame?.(dt);
 
-    raf = requestAnimationFrame(tick);
+    // Re-check after the awaited hook — `running` could have flipped during
+    // the await (e.g. component unmount calls stop()).
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    if (running) {
+      raf = requestAnimationFrame((t) => {
+        void tick(t);
+      });
+    }
   };
 
   return {
@@ -54,7 +55,9 @@ export function createLoop(
       if (running) return;
       running = true;
       lastFrameTime = 0;
-      raf = requestAnimationFrame(tick);
+      raf = requestAnimationFrame((t) => {
+        void tick(t);
+      });
     },
     stop(): void {
       running = false;

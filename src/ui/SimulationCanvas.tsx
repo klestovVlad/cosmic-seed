@@ -1,15 +1,30 @@
 import { useEffect, useRef } from 'react';
 import { createScene } from '@rendering/scene';
-import { createParticleCloud } from '@rendering/particle-cloud';
+import { createParticleCloud, type ParticleCloud } from '@rendering/particle-cloud';
 import { createLoop } from '@rendering/loop';
+import { initWebGpu } from '@rendering/gpu/device';
 import { useSimulationStore } from '@state/simulationStore';
-import { createSimulationRunner, DEFAULT_CONFIG } from '@state/controllers/simulation-runner';
+import { useUiStore } from '@state/uiStore';
+import {
+  createCpuFrameRunner,
+  createGpuFrameRunner,
+  type FrameRunner,
+} from '@state/controllers/frame-runner';
+import { DEFAULT_CONFIG, type SimulationConfig } from '@state/controllers/simulation-runner';
 
 const HUD_REFRESH_HZ = 10;
 const HUD_REFRESH_INTERVAL_MS = 1000 / HUD_REFRESH_HZ;
-// How often (in render frames) we recompute densities for the colormap. Every
-// frame is overkill for the eye and CPU; ~ 6 Hz is plenty.
-const DENSITY_REFRESH_EVERY_N_FRAMES = 10;
+
+const GPU_CONFIG: SimulationConfig = {
+  ...DEFAULT_CONFIG,
+  count: 10000,
+  // Tighter softening — 10k uniformly in a unit sphere has a smaller mean
+  // particle separation, so the softening should follow.
+  softening: 0.02,
+  densityKernelRadius: 0.06,
+};
+
+const CPU_CONFIG: SimulationConfig = DEFAULT_CONFIG;
 
 export function SimulationCanvas(): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -18,85 +33,105 @@ export function SimulationCanvas(): React.JSX.Element {
     const canvas = canvasRef.current;
     if (canvas === null) return;
 
-    const store = useSimulationStore.getState();
-    const scene = createScene(canvas);
-    const runner = createSimulationRunner(DEFAULT_CONFIG);
-    const cloud = createParticleCloud(runner.config.count, window.devicePixelRatio);
-    scene.scene.add(cloud.object);
+    const lifecycle = { cancelled: false };
+    let cleanup: (() => void) | null = null;
 
-    store.setParticleCount(runner.config.count);
+    void (async (): Promise<void> => {
+      const gpuCtx = await initWebGpu();
+      if (lifecycle.cancelled) {
+        gpuCtx?.device.destroy();
+        return;
+      }
 
-    cloud.syncPositions(runner.getSystem());
-    cloud.syncDensities(runner.getDensities());
+      const useGpu = gpuCtx !== null;
+      const config = useGpu ? GPU_CONFIG : CPU_CONFIG;
+      const runner: FrameRunner = useGpu
+        ? createGpuFrameRunner(gpuCtx, config)
+        : createCpuFrameRunner(config);
 
-    let frames = 0;
-    let stepsThisInterval = 0;
-    let lastSampleAt = performance.now();
-    let frameCount = 0;
+      useUiStore.getState().setGpuStatus(
+        useGpu
+          ? { kind: 'supported' }
+          : {
+              kind: 'unsupported',
+              reason: 'WebGPU adapter not available — running on the CPU fallback.',
+            },
+      );
 
-    const loop = createLoop(
-      scene,
-      {
-        simulate: () => {
-          runner.step();
-          stepsThisInterval += 1;
+      const scene = createScene(canvas);
+      const cloud: ParticleCloud = createParticleCloud(runner.count, window.devicePixelRatio);
+      scene.scene.add(cloud.object);
+
+      const store = useSimulationStore.getState();
+      store.setParticleCount(runner.count);
+      store.setRunning(true);
+
+      let frames = 0;
+      let lastSampleAt = performance.now();
+      let lastDensityRange = { min: 1e-3, max: 1.0 };
+
+      const loop = createLoop(
+        scene,
+        {
+          async runFrame(stepsPerFrame): Promise<void> {
+            const frame = await runner.runFrame(stepsPerFrame);
+            cloud.syncPositions(frame.positions);
+            cloud.syncDensities(frame.densities);
+            if (frame.maxDensity > lastDensityRange.max) {
+              const min = Math.max(1e-3, frame.maxDensity * 1e-2);
+              cloud.setDensityRange(min, frame.maxDensity);
+              lastDensityRange = { min, max: frame.maxDensity };
+            }
+          },
+          async onFrame(): Promise<void> {
+            frames += 1;
+            const now = performance.now();
+            const elapsed = now - lastSampleAt;
+            if (elapsed >= HUD_REFRESH_INTERVAL_MS) {
+              await runner.refreshSnapshotAsync();
+              const snap = runner.snapshot();
+              const fps = (frames * 1000) / elapsed;
+              useSimulationStore.getState().setDiagnostics({
+                ...snap,
+                fps,
+                stepsPerSecond: (snap.step * 1000) / Math.max(now, 1),
+              });
+              frames = 0;
+              lastSampleAt = now;
+            }
+          },
         },
-        syncRender: () => {
-          cloud.syncPositions(runner.getSystem());
-          frameCount += 1;
-          if (frameCount % DENSITY_REFRESH_EVERY_N_FRAMES === 0) {
-            runner.refreshDensities();
-            cloud.syncDensities(runner.getDensities());
-            const snap = runner.snapshot();
-            // The renderer maps density logarithmically. Use a small floor for
-            // initial uniform-density frames; track the running peak.
-            const min = Math.max(1e-3, snap.maxParticleDensity * 1e-2);
-            const max = Math.max(min * 10, snap.maxParticleDensity);
-            cloud.setDensityRange(min, max);
-          }
-        },
-        onFrame: () => {
-          frames += 1;
-          const now = performance.now();
-          const dt = now - lastSampleAt;
-          if (dt >= HUD_REFRESH_INTERVAL_MS) {
-            const fps = (frames * 1000) / dt;
-            const sps = (stepsThisInterval * 1000) / dt;
-            const snap = runner.snapshot();
-            useSimulationStore.getState().setDiagnostics({
-              ...snap,
-              fps,
-              stepsPerSecond: sps,
-            });
-            frames = 0;
-            stepsThisInterval = 0;
-            lastSampleAt = now;
-          }
-        },
-      },
-      4,
-    );
+        useGpu ? 2 : 4,
+      );
 
-    const handleResize = (): void => {
-      const w = canvas.clientWidth;
-      const h = canvas.clientHeight;
-      const dpr = window.devicePixelRatio;
-      scene.resize(w, h, dpr);
-      cloud.resize(dpr);
-    };
+      const handleResize = (): void => {
+        const w = canvas.clientWidth;
+        const h = canvas.clientHeight;
+        const dpr = window.devicePixelRatio;
+        scene.resize(w, h, dpr);
+        cloud.resize(dpr);
+      };
 
-    handleResize();
-    window.addEventListener('resize', handleResize);
+      handleResize();
+      window.addEventListener('resize', handleResize);
+      loop.start();
 
-    loop.start();
-    store.setRunning(true);
+      cleanup = (): void => {
+        loop.stop();
+        useSimulationStore.getState().setRunning(false);
+        window.removeEventListener('resize', handleResize);
+        cloud.dispose();
+        scene.dispose();
+        runner.destroy();
+        gpuCtx?.device.destroy();
+      };
+    })().catch((err: unknown) => {
+      console.error('[sim-canvas] init failed', err);
+    });
 
     return () => {
-      loop.stop();
-      useSimulationStore.getState().setRunning(false);
-      window.removeEventListener('resize', handleResize);
-      cloud.dispose();
-      scene.dispose();
+      lifecycle.cancelled = true;
+      cleanup?.();
     };
   }, []);
 

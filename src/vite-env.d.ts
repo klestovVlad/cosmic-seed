@@ -5,6 +5,16 @@ declare module '*.wgsl' {
   export default src;
 }
 
+declare module '*.wgsl?raw' {
+  const src: string;
+  export default src;
+}
+
+declare module '*.glsl?raw' {
+  const src: string;
+  export default src;
+}
+
 declare module '*.glsl' {
   const src: string;
   export default src;

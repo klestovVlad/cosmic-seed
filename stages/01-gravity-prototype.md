@@ -1,6 +1,6 @@
 # Stage 1: Gravity prototype
 
-**Status:** IN PROGRESS
+**Status:** IN PROGRESS (1a/1b/1c landed; cross-validation test pending)
 **Estimated:** 3–5 days
 **Depends on:** Stage 0
 **Spec reference:** Phase 0 (cosmology brief §5)
@@ -104,14 +104,33 @@ Implemented in 1b:
 
 Test totals: 19 unit tests across 7 files; 2 e2e specs (load + checkpoint). All green.
 
-What's left for **Stage 1c**:
+**2026-05-08 — Stage 1c landed.**
 
-- WebGPU compute kernel (`shaders/compute/gravity.wgsl`) for direct N² with workgroup tiling.
-- Position/velocity buffers on the GPU; leapfrog kick-drift and kick compute kernels.
-- GPU density pass (replace the CPU fallback path).
-- Async simulation runner (`step()` queues; `flushAsync()` submits + reads back positions for rendering).
-- Bump default count to 10 000; hit ≥ 60 fps desktop / 30 fps mobile.
-- Cross-validation test: same IC → CPU and GPU positions diverge < 1e-4 over 100 steps.
-- Refresh `docs/checkpoints/stage-01.png` at the new particle count and density.
+GPU path:
 
-Bundle: 736 KB raw / 199 KB gzipped (Three.js dominates). Code-splitting deferred to Stage 7.
+- `shaders/compute/nbody.wgsl` — three entry points (`forceMain`, `kickDriftMain`, `kickMain`) sharing one bind group. Force kernel uses workgroup tiling (WG = 64) so each force evaluation is N²/(WG) global-memory reads instead of N². Self-interaction is masked branch-free with `select`. Plummer softening, G as a uniform.
+- `src/rendering/gpu/device.ts` — adapter + device init, `high-performance` power preference, lost-handler logs to `console.warn`.
+- `src/rendering/gpu/buffers.ts` — `STORAGE | COPY_SRC | COPY_DST` for positions/velocities, `STORAGE | COPY_DST` for accelerations/masses, `MAP_READ | COPY_DST` staging buffers for positions and velocities. Initial state written from the CPU IC's typed arrays.
+- `src/rendering/gpu/pipelines.ts` — three compute pipelines, one bind group, one 16-byte uniform buffer (`SimParams: count, dt, softening_sq, G`).
+- `src/rendering/gpu/gpu-runner.ts` — async runner. Per frame: prime force on first ever call → loop {kickDrift, force, kick} K times → copy positions to staging → submit → mapAsync READ → set the CPU `Float32Array` → unmap. `readVelocities()` does the same dance for velocities at HUD cadence.
+- `src/state/controllers/frame-runner.ts` — unified `FrameRunner` (mode, count, runFrame, snapshot, refreshSnapshotAsync). CPU and GPU implementations behind one interface. The render loop talks only to this interface.
+
+Engine wiring:
+
+- `src/rendering/loop.ts` refactored to await async hooks (so `runFrame` and `onFrame` may return Promises).
+- `src/ui/SimulationCanvas.tsx` boots: tries `initWebGpu()`; on success uses `createGpuFrameRunner` with `count = 10_000, softening = 0.02, kernelRadius = 0.06` and 2 steps per frame; on failure falls back to `createCpuFrameRunner` with the 1.5 k config and 4 steps per frame. The Compatibility banner is wired off the same `gpuStatus` slot.
+- `particle-cloud` API generalised to take a raw `Float32Array` (count × 4) instead of a `ParticleSystem`, so it works with either runner.
+- `@webgpu/types` added so WGSL constants (`GPUBufferUsage`, `GPUMapMode`, `GPUShaderStage`) typecheck.
+
+Energy / virial in GPU mode:
+
+The full O(N²) potential energy at 10 k is too expensive for a 10 Hz HUD readout (~ 1 s per evaluation in JS). Stage 1c ships kinetic energy + momentum + central density + max density only; potential / virial / drift display "—" with a tooltip in the HUD when `runner.mode === 'gpu'`. A sampled-pair estimator or a GPU reduction kernel can land in Stage 7 polish.
+
+What's left for Stage 1 to fully close (carry into Stage 2 unless trivial):
+
+- Cross-validation test: same IC → CPU and GPU positions diverge < 1e-4 over 100 steps. Needs a Playwright spec with a chromium build that has WebGPU enabled (the standard headless shell doesn't).
+- Sampled-pair potential energy on GPU readback for live drift in GPU mode.
+- GPU density pass (currently CPU spatial-grid runs on each readback — fast enough at 10 k but a lot of CPU work we don't need).
+- Refreshed visual checkpoint screenshot from a real Chrome (current screenshot is from headless, which falls back to CPU).
+
+Bundle: 745 KB raw / 200 KB gzipped (Three.js still dominates; the WGSL bundle adds ~ 1 KB). Code-splitting deferred to Stage 7.

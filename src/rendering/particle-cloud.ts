@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import type { ParticleSystem } from '@physics/index';
 
 const VERT_SHADER = /* glsl */ `
   attribute float aDensity;
@@ -50,8 +49,8 @@ const FRAG_SHADER = /* glsl */ `
 
 export interface ParticleCloud {
   readonly object: THREE.Points;
-  /** Copy positions out of the SoA buffer into the GPU geometry. */
-  syncPositions(ps: ParticleSystem): void;
+  /** Copy positions from a `count × 4` (xyz + pad) typed array into the GPU geometry. */
+  syncPositions(positionsXyzw: Float32Array): void;
   /** Copy per-particle densities into the GPU attribute. */
   syncDensities(densities: Float32Array): void;
   setDensityRange(min: number, max: number): void;
@@ -93,18 +92,19 @@ export function createParticleCloud(count: number, dpr: number): ParticleCloud {
 
   const object = new THREE.Points(geometry, material);
 
-  const syncPositions = (ps: ParticleSystem): void => {
-    if (ps.count !== count) {
+  const syncPositions = (positionsXyzw: Float32Array): void => {
+    const expected = count * 4;
+    if (positionsXyzw.length !== expected) {
       throw new Error(
-        `particle count mismatch: cloud expects ${String(count)}, got ${String(ps.count)}`,
+        `particle position buffer length mismatch: expected ${String(expected)}, got ${String(positionsXyzw.length)}`,
       );
     }
     for (let i = 0; i < count; i += 1) {
       const src = i * 4;
       const dst = i * 3;
-      positions[dst] = ps.positions[src] ?? 0;
-      positions[dst + 1] = ps.positions[src + 1] ?? 0;
-      positions[dst + 2] = ps.positions[src + 2] ?? 0;
+      positions[dst] = positionsXyzw[src] ?? 0;
+      positions[dst + 1] = positionsXyzw[src + 1] ?? 0;
+      positions[dst + 2] = positionsXyzw[src + 2] ?? 0;
     }
     const attr = geometry.getAttribute('position') as THREE.BufferAttribute;
     attr.needsUpdate = true;

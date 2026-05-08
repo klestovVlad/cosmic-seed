@@ -42,7 +42,7 @@
       "@workers/*": ["./src/workers/*"]
     },
 
-    "types": ["vite/client"]
+    "types": ["vite/client", "@webgpu/types"]
   },
   "include": ["src", "tests"],
   "exclude": ["tests/e2e"]
