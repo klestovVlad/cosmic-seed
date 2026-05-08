@@ -27,14 +27,16 @@ const HUD_REFRESH_INTERVAL_MS = 1000 / HUD_REFRESH_HZ;
 // Stage 2c2 — cosmological mode by default: Zeldovich IC, periodic
 // min-image gravity, comoving leapfrog with 1/a² drift scale.
 // User-experience tuning (post 2c3 polish):
-//   * grid 20³ on GPU = 8 000 particles (richer field, still well below the
-//     compositor-starvation threshold from Stage 1c).
+//   * grid must be a power of two (Zeldovich uses radix-2 FFT). 16³ = 4096
+//     fits comfortably under the compositor-starvation threshold; the
+//     in-between 8000 → 32768 jump (next power of 2) is too aggressive
+//     until Stage 3c moves the SPH pass to the GPU.
 //   * lower σ_8 so the field stays in a visually-rewarding linear → mildly
 //     nonlinear regime instead of collapsing to a single dominant halo.
 //   * tighter density kernel + smaller point sprites so individual halos
 //     are crisp instead of merging into puffs.
 //   * slower dtMyr so the eye can follow the structure-formation arc.
-const GPU_GRID = 20;
+const GPU_GRID = 16;
 const GPU_CONFIG: SimulationConfig = {
   ...DEFAULT_CONFIG,
   count: GPU_GRID ** 3,
